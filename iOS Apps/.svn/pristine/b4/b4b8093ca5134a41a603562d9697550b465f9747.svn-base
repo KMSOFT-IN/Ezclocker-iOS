@@ -1,0 +1,406 @@
+//
+//  EmployerSettingsViewController.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 8/31/16.
+//  Copyright © 2016 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "EmployerSettingsViewController.h"
+#import "ECSlidingViewController.h"
+#import "user.h"
+#import "threaddefines.h"
+#import "CommonLib.h"
+#import "NSDictionary+Extensions.h"
+#import "NSData+Extensions.h"
+#import "SharedUICode.h"
+
+
+@interface EmployerSettingsViewController ()
+
+@end
+
+@implementation EmployerSettingsViewController
+
+bool scheduleDayChanged = FALSE;
+bool disableEmployeeEditingChanged = FALSE;
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    // Do any additional setup after loading the view.
+    pickerData = @[@"Sunday", @"Monday", @"Tuesday", @"Wednesday", @"Thursday", @"Friday", @"Saturday",];
+    // Connect data
+    self.scheduleDayPicker.dataSource = self;
+    self.scheduleDayPicker.delegate = self;
+    [_scheduleStartDayCell setHidden:TRUE];
+    _settingsTableView.tableFooterView = [[UIView alloc] initWithFrame:CGRectZero];
+    _saveBtn.enabled = FALSE;
+    [self callGetAllOptions];
+
+}
+
+- (void)didReceiveMemoryWarning {
+    [super didReceiveMemoryWarning];
+    // Dispose of any resources that can be recreated.
+}
+
+/*
+#pragma mark - Navigation
+
+// In a storyboard-based application, you will often want to do a little preparation before navigation
+- (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
+    // Get the new view controller using [segue destinationViewController].
+    // Pass the selected object to the new view controller.
+}
+*/
+
+- (IBAction)revealMenu:(id)sender {
+    [self.slidingViewController anchorTopViewTo:ECRight];
+
+}
+// The number of columns of data
+- (NSInteger)numberOfComponentsInPickerView:(UIPickerView *)pickerView
+{
+    return 1;
+}
+
+// The number of rows of data
+- (NSInteger)pickerView:(UIPickerView *)pickerView numberOfRowsInComponent:(NSInteger)component
+{
+    return pickerData.count;
+}
+
+// The data to return for the row and component (column) that's being passed in
+- (NSString*)pickerView:(UIPickerView *)pickerView titleForRow:(NSInteger)row forComponent:(NSInteger)component
+{
+    return pickerData[row];
+}
+
+-(void)pickerView:(UIPickerView *)pickerView didSelectRow:(NSInteger)row inComponent:(NSInteger)component
+{
+    NSString *resultString = pickerData[row];
+  
+    [_scheduleDayBtn setTitle:resultString forState:UIControlStateNormal];
+    
+    _saveBtn.enabled = TRUE;
+    scheduleDayChanged = TRUE;
+
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath{
+    if (indexPath.row == 2)
+    {
+        if (_scheduleStartDayCell.hidden)
+            return 0;
+        else
+            return 100;
+    }
+    else
+        return 48;
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+{
+    // Return the number of sections.
+    return 1;
+}
+
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{
+    // Return the number of rows in the section.
+    return 3;
+}
+
+- (IBAction)doScheduleDayBtnClick:(id)sender {
+    UserClass *user = [UserClass getInstance];
+    //flipe the visiblity so if it's hidden and we tap on the day it shows else it doesn't
+    [_scheduleStartDayCell setHidden:![_scheduleStartDayCell isHidden]];
+    if (!_scheduleStartDayCell.isHidden)
+    {
+        [_scheduleDayPicker selectRow:user.scheduleStartDay inComponent:0 animated:YES];
+    }
+    [_settingsTableView reloadData];
+}
+
+- (IBAction)doSave:(id)sender {
+    [self startSpinnerWithMessage:@"Saving, please wait..."];
+    if (disableEmployeeEditingChanged)
+    {
+        [self callSetEmployerDisableEditingOption: [_allowEditSwitch isOn] withCompletion:^(NSInteger aErrorCode, NSString * _Nullable aResultMessage, NSDictionary * _Nullable aResults, NSError * _Nullable aError) {
+            [self stopSpinner];
+            if (aErrorCode != 0) {
+                [SharedUICode messageBox:nil message:@"There was an issue saving the options. Please try again later" withCompletion:^{
+                    return;
+                }];
+
+            }
+
+            disableEmployeeEditingChanged = FALSE;
+        }];
+    }
+    if (scheduleDayChanged)
+    {
+        int row = (int) [_scheduleDayPicker selectedRowInComponent:0];
+        [self callSetEmployerSetScheduleStartDay: row withCompletion:^(NSInteger aErrorCode, NSString * _Nullable aResultMessage, NSDictionary * _Nullable aResults, NSError * _Nullable aError) {
+            [self stopSpinner];
+            if (aErrorCode != 0) {
+                [SharedUICode messageBox:nil message:@"There was an issue saving the options. Please try again later" withCompletion:^{
+                return;
+                }];
+            
+            }
+            scheduleDayChanged = FALSE;
+        }];
+
+    }
+    _saveBtn.enabled = FALSE;
+    
+}
+
+- (IBAction)doSwitchChanged:(id)sender {
+    _saveBtn.enabled = TRUE;
+    disableEmployeeEditingChanged = TRUE;
+}
+
+-(void) callSetEmployerSetScheduleStartDay: (int)selectedRow withCompletion:(ServerResponseCompletionBlock)completion
+
+{
+    UserClass *user = [UserClass getInstance];
+    NSString *tmpEmployerID = [user.employerID stringValue];
+    NSString *tmpAuthToken = user.authToken;
+        
+    NSString *httpPostString = [NSString stringWithFormat:@"%@employerOptions/set/%@?optionName=%@&optionValue=%d&source=iPhone&authToken=%@", SERVER_URL, tmpEmployerID, @"startDay", selectedRow, tmpAuthToken];
+    
+    
+    NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    
+    request.HTTPMethod = @"PUT";
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    
+    
+    NSURLSessionConfiguration* config = [NSURLSessionConfiguration defaultSessionConfiguration];
+    NSURLSession* session = [NSURLSession sessionWithConfiguration:config];
+    
+    NSURLSessionDataTask* dataTask = [session dataTaskWithRequest:request completionHandler:^(NSData * _Nullable resultData, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        if (nil != error) {
+            MAINTHREAD_BLOCK_START()
+            completion(SERVICE_UNAVAILABLE_ERROR, nil, nil, error);
+            THREAD_BLOCK_END()
+            return;
+        }
+        NSInteger statusCode = [(NSHTTPURLResponse*) response statusCode];
+        if (statusCode == SERVICE_UNAVAILABLE_ERROR){
+            MAINTHREAD_BLOCK_START()
+            completion(SERVICE_UNAVAILABLE_ERROR, nil, nil, error);
+            THREAD_BLOCK_END()
+            return;
+        }
+        @autoreleasepool {
+            [NSData checkData:resultData withCompletion:^(NSInteger errorCode, NSString * _Nullable resultMessage, NSDictionary * _Nullable results, NSError * _Nullable aError) {
+                
+                [self stopSpinner];
+                
+ //               if (errorCode == SERVICE_ERRORCODE_UNKNOWN_ERROR) {
+                    MAINTHREAD_BLOCK_START()
+                    completion(errorCode, resultMessage, results, aError);
+                    THREAD_BLOCK_END()
+                    return;
+//                }
+            }];
+        }
+    }];
+    [dataTask resume];
+
+}
+
+-(void)callSetEmployerDisableEditingOption: (bool) switchIsOn withCompletion:(ServerResponseCompletionBlock)completion
+
+{
+//    DEBUG_MSG
+//    NSAssert(nil != completion, @"completion block cannot be nil %@", msg); NSAssert(nil != employeeId && [employeeId integerValue] > 0, @"employerId cannot be nil and must be valid %@", msg);
+    
+    
+    
+    UserClass *user = [UserClass getInstance];
+    NSString *tmpEmployerID = [user.employerID stringValue];
+    NSString *tmpAuthToken = user.authToken;
+
+    
+    int optionValue = (switchIsOn ? 1 : 0);
+    NSString *httpPostString = [NSString stringWithFormat:@"%@employerOptions/set/%@?optionName=%@&optionValue=%d&source=iPhone&authToken=%@", SERVER_URL, tmpEmployerID, @"EMPLOYER_DISABLE_TIME_ENTRY_EDITING", optionValue, tmpAuthToken];
+    
+    NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    
+    request.HTTPMethod = @"PUT";
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    
+    
+    NSURLSessionConfiguration* config = [NSURLSessionConfiguration defaultSessionConfiguration];
+    NSURLSession* session = [NSURLSession sessionWithConfiguration:config];
+    
+    NSURLSessionDataTask* dataTask = [session dataTaskWithRequest:request completionHandler:^(NSData * _Nullable resultData, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        if (nil != error) {
+            MAINTHREAD_BLOCK_START()
+            completion(SERVICE_UNAVAILABLE_ERROR, nil, nil, error);
+            THREAD_BLOCK_END()
+            return;
+        }
+        NSInteger statusCode = [(NSHTTPURLResponse*) response statusCode];
+        if (statusCode == SERVICE_UNAVAILABLE_ERROR){
+            MAINTHREAD_BLOCK_START()
+            completion(SERVICE_UNAVAILABLE_ERROR, nil, nil, error);
+            THREAD_BLOCK_END()
+            return;
+        }
+        @autoreleasepool {
+            [NSData checkData:resultData withCompletion:^(NSInteger errorCode, NSString * _Nullable resultMessage, NSDictionary * _Nullable results, NSError * _Nullable aError) {
+                
+ //               if (errorCode == SERVICE_ERRORCODE_UNKNOWN_ERROR) {
+                    MAINTHREAD_BLOCK_START()
+                    completion(errorCode, resultMessage, results, aError);
+                    THREAD_BLOCK_END()
+                    return;
+ //               }
+            }];
+        }
+    }];
+    [dataTask resume];
+
+}
+
+-(void) callGetAllOptions
+{
+    [self startSpinnerWithMessage:@"Checking Account..."];
+    UserClass *user = [UserClass getInstance];
+    [self callGetAllOptionsAPI:user.userID withCompletion:^(NSInteger aErrorCode, NSString * _Nullable aResultMessage, NSDictionary * _Nullable aResults, NSError * _Nullable aError) {
+        [self stopSpinner];
+        [self checkOptions:aResults];
+    }];
+
+}
+
+
+- (void)callGetAllOptionsAPI:(NSNumber*)employeeId withCompletion:(ServerResponseCompletionBlock)completion
+{
+    //    DEBUG_MSG
+    //    NSAssert(nil != completion, @"completion block cannot be nil %@", msg); NSAssert(nil != employeeId && [employeeId integerValue] > 0, @"employerId cannot be nil and must be valid %@", msg);
+    
+    
+    
+    UserClass *user = [UserClass getInstance];
+    NSString *tmpEmployerID = [user.employerID stringValue];
+    NSString *tmpAuthToken = user.authToken;
+    
+    NSTimeZone *timeZone = [NSTimeZone localTimeZone];
+    NSString *timeZoneId = timeZone.name;
+    
+    
+    NSString *httpPostString = [NSString stringWithFormat:@"%@employerOptions/getAll/%@?authToken=%@", SERVER_URL, tmpEmployerID, tmpAuthToken];
+    
+    
+    NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    
+    request.HTTPMethod = @"GET";
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    
+    
+    NSURLSessionConfiguration* config = [NSURLSessionConfiguration defaultSessionConfiguration];
+    NSURLSession* session = [NSURLSession sessionWithConfiguration:config];
+    
+    NSURLSessionDataTask* dataTask = [session dataTaskWithRequest:request completionHandler:^(NSData * _Nullable resultData, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        if (nil != error) {
+            MAINTHREAD_BLOCK_START()
+            completion(SERVICE_UNAVAILABLE_ERROR, nil, nil, error);
+            THREAD_BLOCK_END()
+            return;
+        }
+        NSInteger statusCode = [(NSHTTPURLResponse*) response statusCode];
+        if (statusCode == SERVICE_UNAVAILABLE_ERROR){
+            MAINTHREAD_BLOCK_START()
+            completion(SERVICE_UNAVAILABLE_ERROR, nil, nil, error);
+            THREAD_BLOCK_END()
+            return;
+        }
+        @autoreleasepool {
+            [NSData checkData:resultData withCompletion:^(NSInteger errorCode, NSString * _Nullable resultMessage, NSDictionary * _Nullable results, NSError * _Nullable aError) {
+                
+                if (errorCode == SERVICE_ERRORCODE_UNKNOWN_ERROR) {
+                    MAINTHREAD_BLOCK_START()
+                    completion(errorCode, resultMessage, results, aError);
+                    THREAD_BLOCK_END()
+                    return;
+                }
+                
+                if ([NSDictionary isNilOrNull:results]) {
+                    MAINTHREAD_BLOCK_START()
+                    completion(SERVICE_ERRORCODE_SUCCESSFUL, nil, nil, nil);
+                    THREAD_BLOCK_END()
+                } else {
+                    MAINTHREAD_BLOCK_START()
+                    completion(errorCode, resultMessage, results, aError);
+                    THREAD_BLOCK_END()
+                }
+            }];
+        }
+    }];
+    [dataTask resume];
+    
+}
+-(void) checkOptions:(NSDictionary*) employerOptionsResults
+{
+    NSArray *employerOptions = [employerOptionsResults valueForKey:@"employerOptions"];;
+    //check if the edit disable flag changed
+    UserClass *user = [UserClass getInstance];
+    NSString *optionName;
+    NSNumber *optionValue;
+    for (NSDictionary* employerOption in employerOptions) {
+        optionName = [employerOption valueForKey:@"optionName"];
+        if ([optionName isEqualToString:@"EMPLOYER_DISABLE_TIME_ENTRY_EDITING"])
+        {
+            optionValue = [employerOption valueForKey:@"optionValue"];
+            if (user.disableTimeEntryEditing != [optionValue intValue]){
+                user.disableTimeEntryEditing = [optionValue intValue];
+                //persist selection
+                [[NSUserDefaults standardUserDefaults] setInteger:user.disableTimeEntryEditing forKey:@"disableTimeEntryEditing"];
+                [[NSUserDefaults standardUserDefaults] synchronize];
+             }
+            if (user.disableTimeEntryEditing)
+                [_allowEditSwitch setOn:YES animated:YES];
+            else
+                [_allowEditSwitch setOn:FALSE animated:YES];
+
+        }
+        //schedule start day option
+        else if ([optionName isEqualToString:@"startDay"])
+        {
+            optionValue = [employerOption valueForKey:@"optionValue"];
+            if ((user.scheduleStartDay) != [optionValue intValue])
+            {
+                user.scheduleStartDay = [optionValue intValue];
+
+                //persist selection
+                [[NSUserDefaults standardUserDefaults] setInteger:user.disableTimeEntryEditing forKey:@"scheduleStartDay"];
+                [[NSUserDefaults standardUserDefaults] synchronize];
+                
+
+            }
+            //set the schedule day button
+            NSString *resultString = pickerData[user.scheduleStartDay];
+            [_scheduleDayBtn setTitle:resultString forState:UIControlStateNormal];
+
+            
+        }
+        
+    }
+    
+}
+
+
+@end

@@ -1,0 +1,33 @@
+//
+//  ClockInfo+CoreDataProperties.h
+//  ezClocker
+//
+//  Created by Kenneth Lewis on 1/13/16.
+//  Copyright © 2016 ezNova Technologies LLC. All rights reserved.
+//
+//  Choose "Create NSManagedObject Subclass…" from the Core Data editor menu
+//  to delete and recreate this implementation file for your updated model.
+//
+
+#import "ClockInfo.h"
+
+NS_ASSUME_NONNULL_BEGIN
+
+@interface ClockInfo (CoreDataProperties)
+
+@property (nullable, nonatomic, retain) NSNumber *accuracy;
+@property (nullable, nonatomic, retain) NSNumber *altitude;
+@property (nullable, nonatomic, retain) NSNumber *bearing;
+@property (nullable, nonatomic, retain) NSDate *dateTimeEntry;
+@property (nullable, nonatomic, retain) NSString *gpsDataStatus;
+@property (nullable, nonatomic, retain) NSNumber *latitude;
+@property (nullable, nonatomic, retain) NSNumber *locTime;
+@property (nullable, nonatomic, retain) NSNumber *longitude;
+@property (nullable, nonatomic, retain) NSNumber *overrideLocationCheck;
+@property (nullable, nonatomic, retain) NSString *source;
+@property (nullable, nonatomic, retain) NSNumber *speed;
+@property (nullable, nonatomic, retain) NSNumber *status;
+
+@end
+
+NS_ASSUME_NONNULL_END

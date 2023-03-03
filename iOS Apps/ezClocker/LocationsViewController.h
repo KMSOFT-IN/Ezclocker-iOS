@@ -1,0 +1,25 @@
+//
+//  LocationsViewController.h
+//  ezClocker
+//
+//  Created by Raya Khashab on 12/12/16.
+//  Copyright © 2016 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import "UITableViewControllerEx.h"
+#import "LocationDetailViewController.h"
+#import "LocationsWebService.h"
+
+@interface LocationsViewController : UITableViewControllerEx<addLocationViewControllerDelegate, LocationsWebServicesDelegate>
+{
+    LocationDetailViewController *locationDetailViewConroller;
+    UIBarButtonItem *editButton;
+    UIBarButtonItem* cancelButton;
+}
+- (IBAction)revealMenu:(id)sender;
+@property (strong, nonatomic) IBOutlet UITableView *locationListTable;
+- (IBAction)onAddClick:(id)sender;
+- (IBAction)onEditClick:(id)sender;
+
+@end

@@ -1,0 +1,44 @@
+//
+//  NavigationTopViewController.m
+//  ECSlidingViewController
+//
+//  Created by Michael Enriquez on 2/13/12.
+//  Copyright (c) 2012 EdgeCase. All rights reserved.
+//
+
+#import "NavigationTopViewController.h"
+#import "PushNotificationManager.h"
+
+@implementation NavigationTopViewController
+
+-(id)initWithCoder:(NSCoder *)decoder
+{
+    self = [super initWithCoder:decoder];
+    if (![self.slidingViewController.underLeftViewController isKindOfClass:[MenuViewController class]]) {
+        self.slidingViewController.underLeftViewController  = [self.storyboard instantiateViewControllerWithIdentifier:@"Menu"];
+    }
+    
+    
+
+    
+    return self;
+    
+}
+- (void)viewWillAppear:(BOOL)animated
+{
+    [super viewWillAppear:animated];
+    
+    [self.view addGestureRecognizer:self.slidingViewController.panGesture];
+    
+    PushNotificationManager* manager = [PushNotificationManager sharedManager];
+   [manager registerForPushNotification:^(BOOL successful, NSError *error) {
+
+    }];
+    
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+}
+
+@end

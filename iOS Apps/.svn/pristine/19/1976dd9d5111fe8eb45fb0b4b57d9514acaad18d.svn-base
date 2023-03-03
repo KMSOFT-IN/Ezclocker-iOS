@@ -1,0 +1,25 @@
+//
+//  AddPersonInitialViewController.h
+//  ezClocker
+//
+//  Created by Raya Khashab on 11/9/15.
+//  Copyright © 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import "AddEmployeeViewController.h"
+
+@class AddPersonInitialViewController;
+
+@protocol newEmployeeAddedDelegate
+- (void)newEmployeeAdded:(AddPersonInitialViewController *)controller;
+@end
+
+
+@interface AddPersonInitialViewController : UIViewController <addEmployeeViewControllerDelegate>
+- (IBAction)revealMenu:(id)sender;
+- (IBAction)doAddPerson:(UIButton *)sender;
+
+@property (assign, nonatomic) IBOutlet id <newEmployeeAddedDelegate> delegate;
+
+@end

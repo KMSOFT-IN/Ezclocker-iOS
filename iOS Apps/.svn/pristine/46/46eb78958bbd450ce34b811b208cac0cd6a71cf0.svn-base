@@ -1,0 +1,130 @@
+//
+//  ClockInfo+Extensions.m
+//  ezClocker
+//
+//  Created by Kenneth Lewis on 12/14/15.
+//  Copyright © 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "ClockInfo+Extensions.h"
+#import "NSString+Extensions.h"
+#import "NSDate+Extensions.h"
+#import "NSNumber+Extensions.h"
+#import "debugdefines.h"
+#import "coredatadefines.h"
+
+@implementation ClockInfo (CoreDataExtensions)
+
+- (void)setValuesForKeysWithDictionary:(NSDictionary<NSString *,id> *)keyedValues
+{
+    NSAssert(nil != keyedValues, @"Error initializing Managed Object ClockInfo");
+}
+
+- (CLLocationCoordinate2D)location {
+    if (!self.latitude && !self.longitude) {
+        return CLLocationCoordinate2DMake(0.0, 0.0);
+    }
+    if (self.latitude && !self.longitude) {
+        return CLLocationCoordinate2DMake([self.latitude doubleValue], 0.0);
+    } else if (!self.latitude && self.longitude) {
+        return CLLocationCoordinate2DMake(0.0, [self.longitude doubleValue]);
+    }
+    return CLLocationCoordinate2DMake([self.latitude doubleValue], [self.longitude doubleValue]);
+}
+
+- (void)updateFromDict:(NSDictionary *)dict {
+    DEBUG_MSG
+    NSAssert(nil != dict, @"dict cannot be nil %@", msg);
+    self.dateTimeEntry = [dict valueForKey:kcurrentDateTimeKey];
+#ifndef PERSONAL_VERSION
+    self.gpsDataStatus = [NSString trim:[dict valueForKey:kgpsDataStatusKey]];
+    self.latitude = [NSNumber safeNum:[dict valueForKey:klatitudeKey]];
+    self.longitude = [NSNumber safeNum:[dict valueForKey:klongitudeKey]];
+    self.locTime = [NSNumber safeNum:[dict valueForKey:klocTimeKey]];
+    self.overrideLocationCheck = [NSNumber safeNum:[dict valueForKey:koverrideLocationCheckKey]];
+    self.speed = [NSNumber safeNum:[dict valueForKey:kspeedKey]];
+    self.altitude = [NSNumber safeNum:[dict valueForKey:kaltitudeKey]];
+    self.accuracy = [NSNumber safeNum:[dict valueForKey:kaccuracyKey]];
+    self.bearing = [NSNumber safeNum:[dict valueForKey:kbearingKey]];
+#endif
+    self.source = [NSString trim:[dict valueForKey:ksourceKey]];
+}
+
+- (void)saveToDictForCreateSubmission:(NSMutableDictionary*)dict isClockIn:(BOOL)bIsClockIn {
+    DEBUG_MSG
+    NSAssert(nil != dict, @"dict cannot be nil %@", msg);
+    [dict setValue:self.dateTimeEntry forKey:kcurrentDateTimeKey]; // date in DayHistoryItem if it's the first one for the day and clockIn or clockOut based on ClockMode
+    [dict setValue:self.dateTimeEntry forKey:bIsClockIn ? kClockInDateKey : kClockOutDateKey];
+#ifndef PERSONAL_VERSION
+    [dict setValue:self.gpsDataStatus forKey:kgpsDataStatusKey];
+#endif
+    if (![NSString isNilOrEmpty:self.source]) {
+        [dict setValue:self.source forKey:ksourceKey];
+    }
+}
+
+- (void)saveToDictForClockSubmission:(NSMutableDictionary *)dict isClockIn:(BOOL)bIsClockIn {
+    DEBUG_MSG
+    NSAssert(nil != dict, @"dict cannot be nil %@", msg);
+    [dict setValue:self.dateTimeEntry forKey:kcurrentDateTimeKey]; // date in DayHistoryItem if it's the first one for the day and clockIn or clockOut based on ClockMode
+    [dict setValue:self.dateTimeEntry forKey:bIsClockIn ? kClockInDateKey : kClockOutDateKey];
+#ifndef PERSONAL_VERSION
+    [dict setValue:self.gpsDataStatus forKey:kgpsDataStatusKey];
+
+    [dict setValue:[NSNumber safeNum:self.latitude] forKey:klatitudeKey];
+    [dict setValue:[NSNumber safeNum:self.longitude] forKey:klongitudeKey];
+    [dict setValue:[NSNumber safeNum:self.locTime] forKey:klocTimeKey];
+    [dict setValue:self.overrideLocationCheck forKey:koverrideLocationCheckKey];
+    [dict setValue:[NSNumber safeNum:self.speed] forKey:kspeedKey];
+    [dict setValue:[NSNumber safeNum:self.altitude] forKey:kaltitudeKey];
+    [dict setValue:[NSNumber safeNum:self.accuracy] forKey:kaccuracyKey];
+    [dict setValue:[NSNumber safeNum:self.bearing] forKey:kbearingKey];
+#endif
+    if (![NSString isNilOrEmpty:self.source]) {
+        [dict setValue:self.source forKey:ksourceKey];
+    }
+}
+
+- (DBStatus)getDBStatus {
+    NSNumber* numStatus = self.status;
+    if ([NSNumber isNilOrNull:numStatus]) {
+        return dsUpdated;
+    }
+    NSInteger value = [numStatus integerValue];
+    return (DBStatus)value;
+}
+
+/*dsUpdated = 0,       // Is updated from a web standpoint
+dsPendingDelete = 1, // Pending Delete from the TimeSheetDetailViewController
+dsPendingCreate = 2, // Pending Create from the AddTimeEntryViewController
+dsPendingInsert = 3, // Pending Insert from the EmployeeProfileViewController
+dsPendingUpdate = 4, // Pending Update hasn't been updated from a web standpoint*/
+
+- (NSString*)getDBStatusString {
+    DBStatus __status = [self getDBStatus];
+    switch(__status) {
+        case dsPendingInsert:
+            return @"dsPendingInsert";
+        case dsPendingCreate:
+            return @"dsPendingCreate";
+        case dsPendingUpdate:
+            return @"dsPendingUpdate";
+        case dsPendingDelete:
+            return @"dsPendingDelete";
+        default:
+            return @"dsUpdated";
+    }
+}
+
+- (void)setDBStatus:(DBStatus)value {
+    NSNumber* num = [NSNumber numberWithInt:(int)value];
+    self.status = num;
+}
+
+- (BOOL)isNeedingSubmission {
+    DBStatus __status = [self getDBStatus];
+    BOOL bResult = (__status != dsUpdated);
+    return bResult;
+}
+
+@end

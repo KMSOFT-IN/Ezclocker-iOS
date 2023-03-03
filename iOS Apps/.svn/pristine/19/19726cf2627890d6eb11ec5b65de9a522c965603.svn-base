@@ -1,0 +1,634 @@
+//
+//  EmployerScheduleViewController.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 1/3/15.
+//  Copyright (c) 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "EmployerScheduleViewController.h"
+#import "ECSlidingViewController.h"
+#import "MenuViewController.h"
+#import "CommonLib.h"
+#import "user.h"
+#import "MetricsLogWebService.h"
+#import "ScheduleDetailViewController.h"
+
+@implementation EmployerScheduleViewController
+
+
+- (void)viewWillAppear:(BOOL)animated
+{
+    [super viewWillAppear:animated];
+    
+    NSDictionary *navbarTitleTextAttributes = [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [UIColor whiteColor],
+                                               NSForegroundColorAttributeName,
+                                               nil];
+    [self.navigationController.navigationBar setTitleTextAttributes:navbarTitleTextAttributes];
+
+    
+    if (![self.slidingViewController.underLeftViewController isKindOfClass:[MenuViewController class]]) {
+        self.slidingViewController.underLeftViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"Menu"];
+    }
+    self.slidingViewController.underRightViewController = nil;
+    
+    [self.view addGestureRecognizer:self.slidingViewController.panGesture];
+    showErrorMessage = true;
+    
+    addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(addButtonAction)];
+    
+    self.navigationItem.rightBarButtonItem = addButton;
+    
+    
+    [self callGetEmployeeSchedule];
+    
+}
+
+- (id)initWithCoder:(NSCoder *)aDecoder
+{
+    self = [super initWithCoder:aDecoder];
+    if (self){
+        self.title = NSLocalizedString(@"Schedule", @"Schedule");
+        
+        formatterISO8601DateTime = [[NSDateFormatter alloc] init];
+        [formatterISO8601DateTime setDateFormat:@"yyyy-MM-dd'T'HH:mm:ssZ"];
+        [formatterISO8601DateTime setTimeZone:[NSTimeZone timeZoneWithName:@"UTC"]];
+        
+        formatterTime12 = [[NSDateFormatter alloc] init];
+        [formatterTime12 setDateFormat:@"MM/dd/yyyy h:mm a"];
+
+        
+    }
+    
+    return self;
+}
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    scheduleList = [[NSMutableArray alloc] initWithCapacity:0];
+
+    //init starting date with today's date
+    startingDate = [[NSDate alloc] init];
+    todayDate = startingDate;
+    
+    CGRect screenBound = [[UIScreen mainScreen] bounds];
+    CGSize screenSize = screenBound.size;
+    CGFloat screenHeight = screenSize.height;
+    
+    pickerViewDate = [[UIView alloc] initWithFrame:CGRectMake(0, screenHeight-300, 320, 246)];
+    [pickerViewDate setBackgroundColor:[UIColor colorWithRed:240/255.0 green:240/255.0 blue:240/255.0 alpha:1.0]];
+
+    theDatePicker = [[UIDatePicker alloc] initWithFrame:CGRectMake(0, 44, 0, 0)];
+    theDatePicker.datePickerMode = UIDatePickerModeDate;
+    theDatePicker.hidden = NO;
+    
+    theDatePicker.backgroundColor = [UIColor whiteColor];
+
+    formatterDate = [[NSDateFormatter alloc] init];
+    [formatterDate setLocale: [[NSLocale alloc]
+                               initWithLocaleIdentifier:@"en_US"]];
+    [formatterDate setDateFormat:@"MM/dd/yyyy"];
+
+    selectDateButton = [UIButton buttonWithType:UIButtonTypeRoundedRect];
+    selectDateButton.frame = CGRectMake(0, 0, 150.0f, 35.0f);
+    NSString *todayDateSr = [formatterDate stringFromDate:startingDate];
+    [selectDateButton setTitle:todayDateSr forState:UIControlStateNormal];
+
+   // [selectDateButton.titleLabel setFont:[UIFont fontWithName:@"System-Bold" size:30.0]];
+    selectDateButton.titleLabel.font = [UIFont systemFontOfSize:24];
+    
+    [selectDateButton addTarget:self action:@selector(doChangeDate) forControlEvents:UIControlEventTouchUpInside];
+    
+    //    selectDateButton.backgroundColor = [UIColor redColor];
+    [_selectedDateView addSubview:selectDateButton];
+
+
+    
+}
+-(BOOL)closeDatePicker:(id)sender{
+    // [pickerViewDate dismissWithClickedButtonIndex:0 animated:YES];
+    [pickerViewDate removeFromSuperview];
+    return YES;
+}
+
+-(IBAction)DatePickerDoneClick{
+    startingDate = theDatePicker.date;
+    NSString *selectedDate = [formatterDate stringFromDate:theDatePicker.date];
+    [selectDateButton setTitle:selectedDate forState:UIControlStateNormal];
+    
+    [self closeDatePicker:self];
+    
+    [self callGetEmployeeSchedule];
+    
+}
+
+
+
+-(IBAction)DatePickerCancelClick{
+    [self closeDatePicker:self];
+}
+
+
+-(void) updateCurrentSelectedDate:(NSDate*)newDate{
+    startingDate = newDate;
+    [selectDateButton setTitle:[formatterDate stringFromDate:startingDate] forState:UIControlStateNormal];
+
+    
+}
+
+- (IBAction)doNextDateClick:(id)sender {
+    NSDateComponents *dateComponents = [NSDateComponents new];
+    dateComponents.day = 7;
+    NSDate *newDate = [[NSCalendar currentCalendar]dateByAddingComponents:dateComponents
+                                                                   toDate: startingDate
+                                                                  options:0];
+    [self updateCurrentSelectedDate:newDate];
+    
+    [self callGetEmployeeSchedule];
+
+}
+
+- (IBAction)doPrevDateClick:(id)sender {
+    NSDateComponents *dateComponents = [NSDateComponents new];
+    dateComponents.day = -7;
+    NSDate *newDate = [[NSCalendar currentCalendar]dateByAddingComponents:dateComponents
+                                                                   toDate: startingDate options:0];
+    [self updateCurrentSelectedDate:newDate];
+    
+    [self callGetEmployeeSchedule];
+
+}
+
+- (IBAction)revealMenu:(id)sender {
+    [self.slidingViewController anchorTopViewTo:ECRight];
+}
+
+- (IBAction)doChangeDate{
+    [self DatePickerView];
+}
+
+- (IBAction)doChangeDateBtnClick:(id)sender {
+    [self doChangeDate];
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+{
+    if ([scheduleList count] == 0){
+        return 1;
+    }
+    else {
+        
+        return [scheduleList count];
+    }
+
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
+    return 34.f;
+}
+
+//because we are overridng the color of the section header we'll also need to set the Header text
+//because by using this method it will override whatever is in titleForHeaderInSection method
+-(UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section
+{
+    UIView *tempView=[[UIView alloc]initWithFrame:CGRectMake(0,200,300,244)];
+    tempView.backgroundColor = UIColorFromRGB(BLUE_TOOLBAR_COLOR);
+    //  UILabel *tempLabel = [[UILabel alloc] init];
+    UILabel *tempLabel=[[UILabel alloc]initWithFrame:CGRectMake(15,0,300,36)];
+    tempLabel.backgroundColor=[UIColor clearColor];
+    tempLabel.textColor = [UIColor whiteColor];
+    tempLabel.font = [UIFont fontWithName:@"Helvetica" size:16.0f];
+    tempLabel.font = [UIFont boldSystemFontOfSize:16.0f];
+    
+    if ([scheduleList count] > 0)
+    {
+        NSDictionary *dayShiftList;
+        dayShiftList = [scheduleList objectAtIndex:section];
+        tempLabel.text = [dayShiftList valueForKey:@"scheduleDate"];
+    }
+    else {
+        tempLabel.text =  @"No schedule available";
+    }
+    
+    [tempView addSubview:tempLabel];
+    
+    return tempView;
+}
+
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{
+    
+    if ([scheduleList count] > 0)
+    {
+        // Return the number of rows in the section.
+        NSDictionary *daySchedule;
+        daySchedule = [scheduleList objectAtIndex:section];
+        NSArray *dayShifts = [daySchedule valueForKey:@"scheduleTimes"];
+        int tmp = [dayShifts count];
+        return tmp;
+    }
+    else {
+        return 0;
+    }
+    
+}
+
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    static NSString *CellIdentifier = @"Cell";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:CellIdentifier];
+    if (cell == nil) {
+ //       cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:CellIdentifier];
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:CellIdentifier];
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;        
+    }
+    
+
+    NSDictionary *daySchedule;
+    daySchedule = [scheduleList objectAtIndex:indexPath.section];
+    NSArray *dayShifts = [daySchedule valueForKey:@"scheduleTimes"];
+    NSString *dayShift = [dayShifts objectAtIndex:indexPath.row];
+    NSRange range = [dayShift rangeOfString:@"," options:NSBackwardsSearch];
+    NSString *employeeNmae = [dayShift substringToIndex:range.location];
+    cell.textLabel.text = employeeNmae;
+
+    if (range.location != NSNotFound)
+    {
+        NSArray *myWords = [dayShift componentsSeparatedByCharactersInSet:
+                            [NSCharacterSet characterSetWithCharactersInString:@","]
+                            ];
+
+         cell.detailTextLabel.text = myWords[myWords.count - 1];
+        
+
+    }
+    else
+        cell.detailTextLabel.text = dayShift;
+    
+    
+    return cell;
+}
+-(void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)indexPath{
+    
+    [[cell textLabel] setFont:[UIFont systemFontOfSize:20.0]];
+    [[cell detailTextLabel] setFont:[UIFont systemFontOfSize:18.0]];
+    cell.detailTextLabel.textColor = selectDateButton.currentTitleColor;
+    
+    //[UIColor colorWithRed:81.0/255.0 green:102.0/255.0 blue:145.0/255.0 alpha:1.0];
+ }
+
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath{
+    return 60;
+}
+
+//-(void)tableView:willDisplayCellForRow:atIndexPath{
+    
+//}
+
+
+-(void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response
+{
+    if ([response isKindOfClass: [NSHTTPURLResponse class]]) {
+        int statusCode = [(NSHTTPURLResponse*) response statusCode];
+        if (statusCode == SERVICE_UNAVAILABLE_ERROR){
+            //            [self stopSpinner];
+            [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+            
+            //error 503 is when tomcat is down
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+            //don't show any more erors for this api call one is enough
+            showErrorMessage = false;
+        }
+    }
+    
+    
+    data = [[NSMutableData alloc] init];
+}
+-(void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)dataIn
+{
+    [data appendData:dataIn];
+}
+
+-(int) FindScheduleDate: (NSString *) curSchDate
+{
+    int idx = -1;
+    int row = 0;
+    NSString *schDate;
+    for (NSMutableDictionary *item in scheduleList) {
+        schDate = [item valueForKey:@"scheduleDate"];
+        if ([schDate isEqualToString:curSchDate]){
+            idx = row;
+        }
+        else row++;
+    }
+    return idx;
+}
+
+-(void)connectionDidFinishLoading:(NSURLConnection *)connection
+{
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    
+    //clear the prev schedule
+    [scheduleList removeAllObjects];
+    NSError *error = nil;
+    NSString *schStartTime;
+    NSString *shiftDateString, *shiftLongDateString;
+    NSString *schEndTime;
+    
+    NSString *jsonString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    
+    NSDictionary *results = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
+    NSString *resultMessage = [results valueForKey:@"message"];
+    
+    //       NSArray *results = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
+    //    user.timeHistory = [[NSMutableArray alloc] initWithCapacity:0];
+    NSMutableDictionary *newSchedule;
+    //        for (NSDictionary *employees in results){
+    //add a date
+    
+    //        NSString *resultMessage = [employees valueForKey:@"message"];
+    //if message is null or <> Success then the call failed
+    
+    if (([resultMessage isEqual:[NSNull null]]) || (![resultMessage isEqualToString:@"Success"])){
+        [MetricsLogWebService LogException: [NSString stringWithFormat:@"Error from EmployerScheduleViewController JSON Parsing Error= %@ resultMessage= %@", error.localizedDescription, resultMessage]];
+        //if we've already shown an error to the user don't bug him again
+        if (showErrorMessage){
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Server Failure" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+        }
+    }
+    else {
+        UserClass *user = [UserClass getInstance];
+        
+        NSDateFormatter *formatterDateTime12 = [[NSDateFormatter alloc] init];
+        [formatterDateTime12 setDateFormat:@"h:mm a"];
+        
+        NSDateFormatter *formatterDateFromServer = [[NSDateFormatter alloc] init];
+        [formatterDateFromServer setDateFormat:@"MM/dd/yyyy"];
+        
+        formatterLongDate = [[NSDateFormatter alloc] init];
+        //this gives me Monday, Tuesday..etc.
+        [formatterLongDate setDateFormat:@"EEEE, MMM dd, yyyy"];
+        
+        
+        NSArray *schedules = [results valueForKey:@"schedules"];
+        NSString *shiftTime;
+        NSDate *nextShiftDate;
+        
+        for (NSDictionary *schedule in schedules){
+            NSNumber *tmpEmpEmployeeID = [schedule valueForKey:@"employeeId"];
+            NSNumber *scheduleID = [schedule valueForKey:@"id"];
+            
+            NSString *employeeName = [user.employeeNameIDList valueForKey:[tmpEmpEmployeeID stringValue]];
+            
+            
+            schStartTime = [schedule valueForKey:@"startDateTimeIso8601"];
+            NSString *startTime  = [schStartTime stringByReplacingOccurrencesOfString:@"Z" withString:@"+0000"];
+            
+            NSDate *DateValue = [formatterISO8601DateTime dateFromString:schStartTime];
+            nextShiftDate = DateValue;
+            startTime = [formatterDateTime12 stringFromDate:DateValue];
+            //               shiftDate = [formatterDate stringFromDate:DateValue];
+            
+            schEndTime = [schedule valueForKey:@"endDateTimeIso8601"];
+            NSString *endTime  = [schEndTime stringByReplacingOccurrencesOfString:@"Z" withString:@"+0000"];
+            
+            DateValue = [formatterISO8601DateTime dateFromString:schEndTime];
+            endTime = [formatterDateTime12 stringFromDate:DateValue];
+            
+            shiftDateString = [schedule valueForKey:@"shiftDateString"];
+            DateValue = [formatterDateFromServer dateFromString:shiftDateString];
+            shiftLongDateString = [formatterLongDate stringFromDate:DateValue];
+            NSMutableArray *dayShifts;
+            //check if the date is already in the list
+            int idx = [self FindScheduleDate:shiftLongDateString];
+            //if not found
+            bool scheduleExists = idx != -1;
+            if (!scheduleExists )
+            {
+                newSchedule = [[NSMutableDictionary alloc] init];
+                [newSchedule setValue:shiftDateString forKey:@"shiftDateString"];
+                dayShifts = [[NSMutableArray alloc] initWithCapacity:0];
+                [newSchedule setValue:shiftLongDateString forKey:@"scheduleDate"];
+            }
+            else{
+                newSchedule = [scheduleList objectAtIndex:idx];
+                dayShifts = [newSchedule valueForKey:@"scheduleTimes"];
+            }
+  
+            
+            shiftTime = [NSString stringWithFormat:@"%@,%@ - %@", employeeName, startTime, endTime];
+            [dayShifts addObject:shiftTime];
+            
+            [newSchedule setValue:dayShifts forKey:@"scheduleTimes"];
+            [newSchedule setValue:scheduleID forKey:@"id"];
+            
+            if (!scheduleExists )
+            {
+                //sort the list
+                NSDate *shiftDateValue = [formatterDate dateFromString:shiftDateString];
+                int pos = -1;
+                int row = 0;
+                NSString *schDate;
+                for (NSMutableDictionary *item in scheduleList) {
+                    schDate = [item valueForKey:@"scheduleDate"];
+                    NSDate *schDateValue = [formatterLongDate dateFromString:schDate];
+                    if ([shiftDateValue compare:schDateValue] == NSOrderedAscending) {
+                        pos = row;
+                        [scheduleList insertObject:newSchedule atIndex:pos];
+                        break;
+//                        NSLog(@"shiftDateValue is earlier than schDateValue");
+                    }
+                    else row++;
+                }
+                //if we haven't found any dates that come after the one we have then do an add
+                if (pos == -1)
+                    [scheduleList addObject:newSchedule];
+            
+            }
+            
+            
+        }
+        
+        
+    }
+    [_scheduleTable reloadData];
+}
+
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error
+{
+    // release the connection, and the data object
+    // receivedData is declared as a method instance elsewhere
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    //    [self stopSpinner];
+    
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+    
+    [alert show];
+    
+    connection = nil;
+    data = nil;
+}
+
+-(void) callGetEmployeeSchedule{
+    showErrorMessage = true;
+    //   mode = OperationGet;
+    UIAlertView *alert;
+    NSString *httpPostString;
+    NSString *request_body;
+    UserClass *user = [UserClass getInstance];
+    //    NSString *employeeIDStr = [NSString stringWithFormat:@"%@", user.userID];
+    
+    NSString *periodStart = [formatterISO8601DateTime stringFromDate:startingDate];
+    periodStart  = [periodStart stringByReplacingOccurrencesOfString:@"+0000" withString:@"Z"];
+    periodStart  = [periodStart stringByReplacingOccurrencesOfString:@"-0000" withString:@"Z"];
+    
+    
+    NSString *periodDays = @"7";
+    httpPostString = [NSString stringWithFormat:@"%@employer/%@/schedules?days=7&periodStartDate=%@", SERVER_URL, user.employerID, periodStart];
+    
+    NSTimeZone *timeZone = [NSTimeZone localTimeZone];
+    NSString *timeZoneId = timeZone.name;
+    
+    request_body = [NSString
+                    stringWithFormat:@"days=%@&timeZoneId=%@",
+                    [periodDays   stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [timeZoneId  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]];
+    
+    
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    
+    
+    //set HTTP Method
+    NSString *tmpEmployerID = [user.employerID stringValue];
+    NSString *tmpAuthToken = user.authToken;
+    
+    [urlRequest setHTTPMethod:@"GET"];
+    [urlRequest setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [urlRequest setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    [urlRequest setValue:tmpEmployerID forHTTPHeaderField:@"employerId"];
+    [urlRequest setValue:tmpAuthToken forHTTPHeaderField:@"authToken"];
+    
+    
+    
+    //set request body into HTTPBody.
+    //    [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    if (connection)
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = YES;
+    else {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Connection to the server failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+        
+    }
+    
+    
+}
+-(void)DatePickerView
+{
+    pickerToolbar = [[UIToolbar alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, 64)];
+    pickerToolbar.barStyle=UIBarStyleBlackOpaque;
+    
+    [pickerToolbar sizeToFit];
+    
+    
+    UIBarButtonItem *flexSpace = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:self action:nil];
+    
+    
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0.0 , 11.0f, 100, 20.0f)];
+    [titleLabel setBackgroundColor:[UIColor clearColor]];
+    [titleLabel setTextColor:[UIColor whiteColor]];
+    
+    UIBarButtonItem *titleButton = [[UIBarButtonItem alloc] initWithCustomView:titleLabel];
+    titleLabel.text = @"Select Date";
+    
+    UIBarButtonItem *cancelBtn = [[UIBarButtonItem alloc] initWithTitle:@"Cancel" style:UIBarButtonItemStyleBordered target:self action:@selector(DatePickerCancelClick)];
+    
+    UIBarButtonItem *doneDateBarBtn = [[UIBarButtonItem alloc] initWithTitle:@"Done" style:UIBarButtonItemStyleBordered target:self action:@selector(DatePickerDoneClick)];
+    
+    
+    NSArray *itemArray = [[NSArray alloc] initWithObjects:cancelBtn, flexSpace, titleButton, flexSpace, doneDateBarBtn, nil];
+    
+    [pickerToolbar setItems:itemArray animated:YES];
+    
+    [pickerViewDate addSubview:pickerToolbar];
+    [pickerViewDate addSubview:theDatePicker];
+    
+    [self.view addSubview:pickerViewDate];
+    
+}
+
+
+-(void) addButtonAction
+{
+    ScheduleDetailViewController *addViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"ScheduleDetailViewController"];
+    
+    scheduleNavigationController = [[UINavigationController alloc] initWithRootViewController:addViewController];
+    
+    
+    
+    //   AddTimeEntryViewController *controller = [[AddTimeEntryViewController alloc] initWithNibName:@"AddTimeEntryViewController" bundle:nil];
+    
+//    addViewController.employeeID = employeeID;
+    addViewController.delegate = (id) self;
+    addViewController.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+    
+    [self presentViewController:scheduleNavigationController animated:YES completion:nil];
+    
+}
+
+- (void)scheduleDetailViewControllerDidFinish:(ScheduleDetailViewController *)controller
+{
+    [self dismissViewControllerAnimated:YES completion:nil];
+    [self.navigationController popToRootViewControllerAnimated:YES];
+    [self callGetEmployeeSchedule];
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    // Navigation logic may go here. Create and push another view controller.
+    if (!self.scheduleDetailViewController){
+        self.scheduleDetailViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"ScheduleDetailViewController"];
+        self.scheduleDetailViewController.delegate = (id) self;
+    }
+
+    //selectedSchedule is the schedule the user selected
+    //scheduleInfo is JSON object we are going to pass to the detail view
+    NSDictionary *scheduleInfo = [[NSMutableDictionary alloc] init];
+    NSDictionary *selectedSchedule = [scheduleList objectAtIndex:indexPath.section];
+    NSNumber *schID = [selectedSchedule valueForKey:@"id"];
+    [scheduleInfo setValue:schID forKey:@"id"];
+    UITableViewCell *selectedCell = [tableView cellForRowAtIndexPath:indexPath];
+    NSString *cellText = selectedCell.textLabel.text;
+    [scheduleInfo setValue:cellText forKey:@"employeeName"];
+    NSString *cellDetailText = selectedCell.detailTextLabel.text;
+    [scheduleInfo setValue:cellDetailText forKey:@"startingDateTime"];
+    NSString *shiftDate = [selectedSchedule valueForKey:@"shiftDateString"];
+    NSString *startDateTime, *endDateTime;
+    NSRange range = [@" - " rangeOfString:cellDetailText];
+    if (range.location == NSNotFound)
+    {
+        NSArray *myWords = [cellDetailText componentsSeparatedByCharactersInSet:
+                            [NSCharacterSet characterSetWithCharactersInString:@"-"]
+                            ];
+        
+        startDateTime = [NSString stringWithFormat:@"%@ %@", shiftDate , myWords[0]];
+        [scheduleInfo setValue:startDateTime forKey:@"startDateTime"];
+        endDateTime = [NSString stringWithFormat:@"%@ %@", shiftDate , myWords[1]];
+        [scheduleInfo setValue:endDateTime forKey:@"endDateTime"];
+    }
+
+    self.scheduleDetailViewController.selectedSchedule = scheduleInfo;
+    
+    [self.navigationController pushViewController: self.scheduleDetailViewController animated:YES];
+}
+
+@end

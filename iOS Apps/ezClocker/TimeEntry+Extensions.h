@@ -1,0 +1,47 @@
+//
+//  TimeEntry+Extensions.h
+//  ezClocker
+//
+//  Created by Kenneth Lewis on 12/15/15.
+//  Copyright © 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "TimeEntry.h"
+#import "coredatadefines.h"
+#import "CommonLib.h"
+
+#define IS_TIME_ENTRY_VALID() \
+NSNumber* timeEntryID = [timeEntry.timeEntryID copy]; \
+BOOL bIsTimeEntryIDValid = ![NSNumber isNilOrNull:timeEntryID] && ([timeEntryID integerValue] > 0);
+
+@interface TimeEntry (TimeEntryExtensions)
+
+- (void)updateClockInClockOut:(NSDate*)clockInDate clockOut:(NSDate*)clockOutDate;
+
+- (void)deleteClockOut;
+
+- (BOOL)updateTimeEntryFromDict:(NSDictionary*)dict wasModified:(BOOL*)bModified error:(NSError* __autoreleasing*)error;
+- (void)updateTimeEntryFromDict:(NSDictionary*)dict clockMode:(ClockMode)clockMode;
+- (BOOL)saveFromTimeEntry:(TimeEntry*)timeEntry error:(NSError*__autoreleasing*)error;
+
+- (NSMutableDictionary*)saveToDictForSubmissionForClockMode:(ClockMode)clockInOrOut;
+- (void)saveToDictForCreateSubmission:(NSMutableDictionary*)dict;
+- (void)saveToDictForUpdateSubmission:(NSMutableDictionary*)dict;
+
+- (double)calculateTotalMilliseconds;
+- (void)updateTimeEntryForMilliseconds;
+
+- (BOOL)isNeedingSubmission;
+- (BOOL)hasPendingUpdates;
+
+- (DBStatus)getDBStatus;
+- (void)setDBStatus:(DBStatus)value;
+
+- (NSString*)getDBStatusString;
+
+- (void)updateDBStatusAndDBStatusForClockMode:(DBStatus)aStatus clockMode:(ClockMode)clockMode;
+- (void)updateDBStatus:(DBStatus)aStatus;
+
+- (BOOL)isTimeEntryIDValid;
+
+@end

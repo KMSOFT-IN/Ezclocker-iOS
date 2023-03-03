@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="17709" systemVersion="20G314" minimumToolsVersion="Xcode 7.0" sourceLanguage="Objective-C" userDefinedModelVersionIdentifier="">
+    <entity name="ClockInfo" representedClassName="ClockInfo" syncable="YES">
+        <attribute name="accuracy" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="NO" syncable="YES"/>
+        <attribute name="altitude" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="NO" syncable="YES"/>
+        <attribute name="bearing" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="NO" syncable="YES"/>
+        <attribute name="dateTimeEntry" optional="YES" attributeType="Date" usesScalarValueType="NO" syncable="YES"/>
+        <attribute name="gpsDataStatus" optional="YES" attributeType="String" syncable="YES"/>
+        <attribute name="latitude" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="NO" syncable="YES"/>
+        <attribute name="locTime" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="NO" syncable="YES"/>
+        <attribute name="longitude" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="NO" syncable="YES"/>
+        <attribute name="overrideLocationCheck" optional="YES" attributeType="Boolean" usesScalarValueType="NO" syncable="YES"/>
+        <attribute name="source" optional="YES" attributeType="String" syncable="YES"/>
+        <attribute name="speed" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="NO" syncable="YES"/>
+        <attribute name="status" optional="YES" attributeType="Integer 32" minValueString="0" maxValueString="4" defaultValueString="0" usesScalarValueType="NO" syncable="YES"/>
+    </entity>
+    <entity name="DayHistoryItem" representedClassName="DayHistoryItem" syncable="YES">
+        <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO" indexed="YES" syncable="YES"/>
+        <relationship name="employee" optional="YES" maxCount="1" deletionRule="Cascade" ordered="YES" destinationEntity="Employee" inverseName="dayHistory" inverseEntity="Employee" syncable="YES"/>
+        <relationship name="timeEntries" optional="YES" toMany="YES" deletionRule="Cascade" ordered="YES" destinationEntity="TimeEntry" inverseName="dayHistoryItem" inverseEntity="TimeEntry" syncable="YES"/>
+    </entity>
+    <entity name="DeletedTimeEntry" representedClassName="DeletedTimeEntry" syncable="YES">
+        <attribute name="timeEntryID" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="NO" syncable="YES"/>
+        <relationship name="employee" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Employee" inverseName="deletedEntries" inverseEntity="Employee" syncable="YES"/>
+    </entity>
+    <entity name="Employee" representedClassName="Employee" syncable="YES">
+        <attribute name="acceptedInvite" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="NO" syncable="YES"/>
+        <attribute name="email" optional="YES" attributeType="String" syncable="YES"/>
+        <attribute name="employeeID" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="NO" syncable="YES"/>
+        <attribute name="isClockedIn" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="NO" syncable="YES"/>
+        <attribute name="name" optional="YES" attributeType="String" indexed="YES" syncable="YES"/>
+        <relationship name="dayHistory" optional="YES" toMany="YES" deletionRule="Cascade" ordered="YES" destinationEntity="DayHistoryItem" inverseName="employee" inverseEntity="DayHistoryItem" syncable="YES"/>
+        <relationship name="deletedEntries" optional="YES" toMany="YES" deletionRule="Cascade" ordered="YES" destinationEntity="DeletedTimeEntry" inverseName="employee" inverseEntity="DeletedTimeEntry" syncable="YES"/>
+    </entity>
+    <entity name="TimeEntry" representedClassName="TimeEntry" syncable="YES">
+        <attribute name="jobCodeId" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="NO" syncable="YES"/>
+        <attribute name="notes" optional="YES" attributeType="String" syncable="YES"/>
+        <attribute name="status" optional="YES" attributeType="Integer 32" minValueString="0" maxValueString="4" defaultValueString="0" usesScalarValueType="NO" syncable="YES"/>
+        <attribute name="timeEntryID" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="NO" syncable="YES"/>
+        <attribute name="totalMilliseconds" optional="YES" attributeType="Integer 32" defaultValueString="0.0" usesScalarValueType="NO" syncable="YES"/>
+        <relationship name="clockIn" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="ClockInfo" syncable="YES"/>
+        <relationship name="clockOut" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="ClockInfo" syncable="YES"/>
+        <relationship name="dayHistoryItem" optional="YES" maxCount="1" deletionRule="Cascade" ordered="YES" destinationEntity="DayHistoryItem" inverseName="timeEntries" inverseEntity="DayHistoryItem" syncable="YES"/>
+    </entity>
+    <elements>
+        <element name="ClockInfo" positionX="-875" positionY="-990" width="128" height="223"/>
+        <element name="DayHistoryItem" positionX="-1487" positionY="-1054" width="128" height="88"/>
+        <element name="DeletedTimeEntry" positionX="-1721" positionY="-898" width="128" height="73"/>
+        <element name="Employee" positionX="-1730" positionY="-1213" width="128" height="148"/>
+        <element name="TimeEntry" positionX="-1235" positionY="-1053" width="128" height="149"/>
+    </elements>
+</model>

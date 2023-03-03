@@ -1,0 +1,769 @@
+//
+//  TimeSheetDetailViewController.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 10/22/13.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "TimeSheetDetailViewController.h"
+#import "user.h"
+#import <QuartzCore/QuartzCore.h>
+#import "CommonLib.h"
+#import "EZAnnotation.h"
+#import "TimeEntryHistoryViewController.h"
+#import "MapViewController.h"
+
+@interface TimeSheetDetailViewController ()
+
+@end
+
+@implementation TimeSheetDetailViewController
+@synthesize spinner = _spinner;
+@synthesize clockInTextField = _clockInTextField;
+@synthesize clockOutTextField = _clockOutTextField;
+@synthesize timeEntryID;
+@synthesize timeEntryNotes;
+@synthesize clockInGpsDataStatus;
+@synthesize clockOutGpsDataStatus;
+@synthesize reasonTextField;
+@synthesize clockInDateTime;
+@synthesize clockOutDateTime;
+@synthesize clockInLocation, clockOutLocation;
+
+@synthesize delegate = _delegate;
+@synthesize selectedMode, employeeName;
+
+-(id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
+{
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    if (self){
+        self.title = NSLocalizedString(@"Edit Time Entry", @"Edit Time Entry");
+    }
+    
+    return self;
+}
+
+- (id)initWithCoder:(NSCoder *)aDecoder
+{
+    self = [super initWithCoder:aDecoder];
+    if (self){
+        self.title = NSLocalizedString(@"Edit Time Entry", @"Edit Time Entry");
+    }
+    
+    return self;
+}
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    //put a borde on the text field
+    reasonTextField.text = @"";
+    CALayer *imageLayer = reasonTextField.layer;
+    [imageLayer setCornerRadius:10];
+    [imageLayer setBorderWidth:2.1];
+    imageLayer.borderColor=[[UIColor lightGrayColor] CGColor];
+    
+    _mapHistoryTable.layer.borderWidth = 0.5;
+    _mapHistoryTable.separatorStyle = UITableViewCellSeparatorStyleNone;
+    
+    UIBarButtonItem* saveButton = [[UIBarButtonItem alloc] initWithTitle:@"Save" style:UIBarButtonItemStylePlain target:self action:@selector(saveButtonAction)];
+    
+    self.navigationItem.rightBarButtonItem = saveButton;
+
+    
+    formatterDateTime12 = [[NSDateFormatter alloc] init];
+    [formatterDateTime12 setDateFormat:@"MM/dd/yyyy h:mm:ss a"];
+    formatterDateTime = [[NSDateFormatter alloc] init];
+    [formatterDateTime setDateFormat:@"MM/dd/yyyy HH:mm:ss"];
+    formatterISO8601DateTime = [[NSDateFormatter alloc] init];
+    [formatterISO8601DateTime setDateFormat:@"yyyy-MM-dd'T'HH:mm:ssZ"];
+    
+    [self registerForKeyboardNotifications];
+    
+    TextFieldMode = 1;
+    
+    _clockInTextField.delegate = self;
+    _clockOutTextField.delegate = self;
+
+    CGRect screenBound = [[UIScreen mainScreen] bounds];
+    CGSize screenSize = screenBound.size;
+    CGFloat screenHeight = screenSize.height;
+
+    pickerViewDate = [[UIView alloc] initWithFrame:CGRectMake(0, screenHeight-300, 320, 246)];
+    [pickerViewDate setBackgroundColor:[UIColor colorWithRed:240/255.0 green:240/255.0 blue:240/255.0 alpha:1.0]];
+    
+    theDatePicker = [[UIDatePicker alloc] initWithFrame:CGRectMake(0, 44, 0, 0)];
+    theDatePicker.datePickerMode = UIDatePickerModeDateAndTime;
+    theDatePicker.hidden = NO;
+    NSDate *date = [NSDate date];
+    theDatePicker.date = date;
+    
+#ifdef PERSONAL_VERSION
+    _reasonLabel.text = @"Notes";
+#endif
+    
+    reasonTextField.delegate = (id) self;
+    
+    keyboardToolbar = [[UIToolbar alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, 64)];
+    keyboardToolbar.barStyle=UIBarStyleBlackOpaque;
+    
+    [keyboardToolbar sizeToFit];
+    
+    
+    
+    UIBarButtonItem *flexSpace = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:self action:nil];
+    
+    
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0.0 , 11.0f, 200, 20.0f)];
+    [titleLabel setBackgroundColor:[UIColor clearColor]];
+    [titleLabel setTextColor:[UIColor whiteColor]];
+    titleLabel.text = @"Enter reason for change";
+    
+    UIBarButtonItem *titleButton = [[UIBarButtonItem alloc] initWithCustomView:titleLabel];
+
+    UIBarButtonItem *doneDateBarBtn = [[UIBarButtonItem alloc] initWithTitle:@"Done" style:UIBarButtonItemStyleBordered target:self action:@selector(keyBoardDoneClick)];
+    
+    
+   
+    NSArray *itemArray = [[NSArray alloc] initWithObjects:titleButton, flexSpace, doneDateBarBtn, nil];
+    
+
+    
+    [keyboardToolbar setItems:itemArray animated:YES];
+
+    [reasonTextField setInputAccessoryView:keyboardToolbar];
+}
+
+- (void)viewDidUnload
+{
+    [self setReasonTextField:nil];
+    [self setClockInTextField:nil];
+    [self setClockOutTextField:nil];
+    pickerViewDate = nil;
+    theDatePicker = nil;
+    pickerToolbar = nil;
+    
+    [super viewDidUnload];
+    _spinner = nil;
+    // Release any retained subviews of the main view.
+    // e.g. self.myOutlet = nil;
+}
+
+-(void) viewWillDisappear:(BOOL)animated{
+    [self.view endEditing:YES];
+
+    [self removeKeyboard];
+    [self.view resignFirstResponder];
+    [super viewWillDisappear:animated];
+}
+-(void) viewWillAppear:(BOOL)animated{
+    UserClass *user = [UserClass getInstance];
+   reasonTextField.text = timeEntryNotes;
+
+   // [reasonTextField resignFirstResponder];
+
+    if ([clockInDateTime length] > 0)
+    {
+        _clockInTextField.text = clockInDateTime;
+        _clockOutTextField.text = clockOutDateTime;
+    }
+    
+    
+ //   scrollViewCGSize = _scrollView.contentSize;
+
+    [_scrollView setScrollEnabled:YES];
+    [_scrollView setContentSize:CGSizeMake(320, 650)];
+    _scrollView.backgroundColor = UIColorFromRGB(GRAY_BACKGROUND_COLOR);
+    _scrollView.delaysContentTouches = NO;
+
+    [self.view endEditing:YES];
+    
+    [self removeKeyboard];
+}
+
+- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
+{
+    return (interfaceOrientation == UIInterfaceOrientationPortrait);
+}
+
+// Call this method somewhere in your view controller setup code.
+- (void)registerForKeyboardNotifications
+{
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(keyboardWasShown:)
+                                                 name:UIKeyboardDidShowNotification object:nil];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(keyboardWillBeHidden:)
+                                                 name:UIKeyboardWillHideNotification object:nil];
+    
+}
+
+// Called when the UIKeyboardDidShowNotification is sent.
+- (void)keyboardWasShown:(NSNotification*)aNotification
+{
+    NSDictionary* info = [aNotification userInfo];
+    CGSize kbSize = [[info objectForKey:UIKeyboardFrameBeginUserInfoKey] CGRectValue].size;
+    
+    UIEdgeInsets contentInsets = UIEdgeInsetsMake(0.0, 0.0, kbSize.height, 0.0);
+    _scrollView.contentInset = contentInsets;
+    _scrollView.scrollIndicatorInsets = contentInsets;
+    
+    // If active text field is hidden by keyboard, scroll it so it's visible
+    // Your app might not need or want this behavior.
+    CGRect aRect = self.view.frame;
+    aRect.size.height -= kbSize.height;
+    if (!CGRectContainsPoint(aRect, _mapHistoryTable.frame.origin) ) {
+        [self.scrollView scrollRectToVisible:reasonTextField.frame animated:YES];
+        
+    }
+}
+
+// Called when the UIKeyboardWillHideNotification is sent
+- (void)keyboardWillBeHidden:(NSNotification*)aNotification
+{
+    UIEdgeInsets contentInsets = UIEdgeInsetsZero;
+    _scrollView.contentInset = contentInsets;
+    _scrollView.scrollIndicatorInsets = contentInsets;
+}
+
+-(BOOL)textFieldShouldBeginEditing:(UITextField *)textField
+{
+    // Here You can do additional code or task instead of writing with keyboard
+    return NO;
+}
+
+-(void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response
+{
+    if ([response isKindOfClass: [NSHTTPURLResponse class]]) {
+        int statusCode = [(NSHTTPURLResponse*) response statusCode];
+        if (statusCode == SERVICE_UNAVAILABLE_ERROR){
+            [self stopSpinner];
+            [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+            
+            //error 503 is when tomcat is down
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+        }
+    }
+    
+    
+    data = [[NSMutableData alloc] init];
+}
+-(void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)dataIn
+{
+    [data appendData:dataIn];
+}
+
+-(void)connectionDidFinishLoading:(NSURLConnection *)connection
+{
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    [self stopSpinner];
+    UIAlertView *alert;
+    NSError *error = nil;
+    NSDictionary *results = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
+    NSString *resultMessage = [results valueForKey:@"message"];
+    if (([resultMessage isEqual:[NSNull null]]) || (![resultMessage isEqualToString:@"Success"])){
+        if ([resultMessage isEqual:[NSNull null]]){
+            alert = [[UIAlertView alloc] initWithTitle:nil message:@"Time Entry from Server Failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        }
+        else
+            alert = [[UIAlertView alloc] initWithTitle:nil message:resultMessage delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+    }
+    else {
+        [self.delegate saveTimeEntryDidFinish:self];
+
+    }
+    
+   
+}
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error
+{
+    // release the connection, and the data object
+    // receivedData is declared as a method instance elsewhere
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    [self stopSpinner];
+    
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+    
+    [alert show];
+    
+    connection = nil;
+    data = nil;
+}
+
+
+-(void) callModifyTimeEntryWebService{
+    
+    //NSString *currentDateTime = self.getCurrentDateTime;
+    UserClass *user = [UserClass getInstance];
+    UIAlertView *alert;
+
+    NSString *description = reasonTextField.text; //@"change time entry";
+    NSString *httpPostString;
+    //if mode=OUT means we are changing the clockout value
+    NSString *clockInISO8601 = @"";
+    NSString *clockOutISO8601 = @"";
+    
+    NSDate *ClockInDateValue = [formatterDateTime12 dateFromString:_clockInTextField.text];
+    
+    [formatterISO8601DateTime setTimeZone:[NSTimeZone timeZoneWithName:@"UTC"]];
+    clockInISO8601 = [formatterISO8601DateTime stringFromDate:ClockInDateValue];
+    clockInISO8601  = [clockInISO8601 stringByReplacingOccurrencesOfString:@"+0000" withString:@"Z"];
+    clockInISO8601  = [clockInISO8601 stringByReplacingOccurrencesOfString:@"-0000" withString:@"Z"];
+    
+    NSDate *ClockOutDateValue = [formatterDateTime12 dateFromString:_clockOutTextField.text];
+    
+    [formatterISO8601DateTime setTimeZone:[NSTimeZone timeZoneWithName:@"UTC"]];
+    clockOutISO8601 = [formatterISO8601DateTime stringFromDate:ClockOutDateValue];
+    clockOutISO8601  = [clockOutISO8601 stringByReplacingOccurrencesOfString:@"+0000" withString:@"Z"];
+    clockOutISO8601  = [clockOutISO8601 stringByReplacingOccurrencesOfString:@"-0000" withString:@"Z"];
+
+//    if ([timeEntryMode isEqualToString:@"OUT"]) {
+//        clockOutISO8601 = timeEntryStringISO8601;
+//    }
+//    else {
+//        clockInISO8601 = timeEntryStringISO8601;
+//    }
+    
+    //pass the person that did the clock in/out if we don't know the name then pass the email
+    NSString *modifiedBy = user.employerName;
+    if ([modifiedBy isEqualToString :@"" ])
+        modifiedBy = user.userEmail;
+
+    
+    NSTimeZone *timeZone = [NSTimeZone localTimeZone];
+    NSString *timeZoneId = timeZone.name;
+
+    NSString *request_body;
+
+    httpPostString = [NSString stringWithFormat:@"%@timeEntry/modify/%@/%@", SERVER_URL, user.employerID, timeEntryID];
+
+
+    //Implement request_body for send request here authToken and clock DateTime set into the body.
+    request_body = [NSString 
+                    stringWithFormat:@"authToken=%@&description=%@&clockInISO8601Utc=%@&clockOutISO8601Utc=%@&timeZoneId:=%@&modifiedBy=%@",
+                    [user.authToken   stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [description  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [clockInISO8601  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [clockOutISO8601  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [timeZoneId  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [modifiedBy   stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]
+                    ];
+    
+  //  alert = [[UIAlertView alloc] initWithTitle:nil message:request_body delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+   // [alert show];
+ 
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    //set HTTP Method
+    [urlRequest setHTTPMethod:@"POST"];
+    
+    //set request body into HTTPBody.
+    [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    if (connection)
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = YES;
+    else {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Connection to the server failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+        
+    }
+    
+    
+}
+-(void) callDeleteTimeEntryWebService{
+    
+    //NSString *currentDateTime = self.getCurrentDateTime;
+    UserClass *user = [UserClass getInstance];
+    UIAlertView *alert;
+    
+    //pass the person that did the clock in/out if we don't know the name then pass the email
+    NSString *modifiedBy = user.employerName;
+    if ([modifiedBy isEqualToString :@"" ])
+        modifiedBy = user.userEmail;
+   
+    NSString *request_body;
+    NSString *httpPostString;
+   
+    
+    httpPostString = [NSString stringWithFormat:@"%@timeEntry/remove/%@/%@", SERVER_URL, user.employerID, timeEntryID];
+    
+    
+    //Implement request_body for send request here authToken and clock DateTime set into the body.
+    request_body = [NSString
+                    stringWithFormat:@"authToken=%@&modifiedBy=%@",
+                    [user.authToken   stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [modifiedBy   stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]
+                    ];
+    
+    //  alert = [[UIAlertView alloc] initWithTitle:nil message:request_body delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+    // [alert show];
+    
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    //set HTTP Method
+    [urlRequest setHTTPMethod:@"POST"];
+    
+    //set request body into HTTPBody.
+    [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    if (connection)
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = YES;
+    else {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Connection to the server failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+        
+    }
+    
+    
+}
+
+-(void) startSpinner{
+    if (!self.spinner)
+    {
+        self.spinner = [[MBProgressHUD alloc] initWithView:self.view];
+    }
+    self.spinner.labelText = @"Saving";
+    [self.view addSubview:self.spinner];
+    [self.spinner show:YES];
+}
+
+-(void) stopSpinner{
+    [self.spinner hide:YES];
+}
+
+
+
+-(void) saveButtonAction
+{
+    NSDate *clockPickerDate;
+    clockPickerDate = [pickDate date];
+    
+//only force non personal accounts to enter a reason for the edit
+#ifndef PERSONAL_VERSION
+    if (reasonTextField.text.length == 0) {
+        UIAlertView *alert;
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Please enter a reason for the change" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+
+    }
+    else {
+        [self startSpinner ];
+        [self callModifyTimeEntryWebService];
+    }
+#else
+    [self startSpinner ];
+    [self callModifyTimeEntryWebService];
+#endif
+    
+    [self removeKeyboard];
+    
+}
+
+
+-(void)dateSelected:(id)sender{
+    if (TextFieldMode == 1)
+        _clockInTextField.text = [formatterDateTime12 stringFromDate:[sender date]];
+    else {
+        _clockOutTextField.text = [formatterDateTime12 stringFromDate:[sender date]];
+    }
+ }
+
+
+-(void)removeKeyboard{
+ //   self.view.center = originalCenter;
+    [reasonTextField resignFirstResponder];
+}
+
+- (IBAction)doClockInEditingBegin:(id)sender {
+ //   self.view.center = CGPointMake(originalCenter.x, originalCenter.y - 100);
+
+}
+
+-(BOOL)closeDatePicker:(id)sender{
+    [pickerViewDate removeFromSuperview];
+    return YES;
+}
+
+
+-(IBAction)DatePickerDoneClick{
+    UITextField *curTextField;
+    if (TextFieldMode == 1)
+        curTextField = _clockInTextField;
+    else
+        curTextField = _clockOutTextField;
+    curTextField.text = [formatterDateTime12 stringFromDate:theDatePicker.date];
+    
+    [self closeDatePicker:self];
+    
+}
+-(IBAction)keyBoardDoneClick{
+    [reasonTextField resignFirstResponder];
+
+}
+
+-(IBAction)DatePickerCancelClick{
+    [self closeDatePicker:self];
+}
+
+-(void) showDatePicker{
+    [self removeKeyboard];
+    
+    pickerToolbar = [[UIToolbar alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, 64)];
+    pickerToolbar.barStyle=UIBarStyleBlackOpaque;
+    
+    [pickerToolbar sizeToFit];
+    
+    UIBarButtonItem *cancelBtn = [[UIBarButtonItem alloc] initWithTitle:@"Cancel" style:UIBarButtonItemStyleBordered target:self action:@selector(DatePickerCancelClick)];
+    
+    
+    UIBarButtonItem *flexSpace = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:self action:nil];
+    
+    
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0.0 , 11.0f, 80, 20.0f)];
+    [titleLabel setBackgroundColor:[UIColor clearColor]];
+    [titleLabel setTextColor:[UIColor whiteColor]];
+    
+    UIBarButtonItem *titleButton = [[UIBarButtonItem alloc] initWithCustomView:titleLabel];
+    if (TextFieldMode == 1)
+        titleLabel.text = @"Clock In";
+    else
+        titleLabel.text = @"Clock Out";
+    
+    UIBarButtonItem *doneDateBarBtn = [[UIBarButtonItem alloc] initWithTitle:@"Done" style:UIBarButtonItemStyleBordered target:self action:@selector(DatePickerDoneClick)];
+    
+    
+    NSArray *itemArray = [[NSArray alloc] initWithObjects:cancelBtn, flexSpace, titleButton, flexSpace, doneDateBarBtn, nil];
+    
+    [pickerToolbar setItems:itemArray animated:YES];
+    
+    UITextField *curTextField;
+    if (TextFieldMode == 1)
+        curTextField = _clockInTextField;
+    else
+        curTextField = _clockOutTextField;
+    if (![curTextField.text isEqualToString:@""])
+        theDatePicker.date = [formatterDateTime12 dateFromString:curTextField.text];
+    else
+        curTextField.text = [formatterDateTime12 stringFromDate:theDatePicker.date];
+    
+    
+    [pickerViewDate addSubview:pickerToolbar];
+    [pickerViewDate addSubview:theDatePicker];
+    
+    [self.view addSubview:pickerViewDate];
+    
+/*    NSMutableArray *barItems = [[NSMutableArray alloc] init];
+    
+    UIBarButtonItem *doneDateBarBtn = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(DatePickerDoneClick)];
+    
+    UIBarButtonItem *flexSpace = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:self action:nil];
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0.0 , 11.0f, 80, 20.0f)];
+
+    [titleLabel setBackgroundColor:[UIColor clearColor]];
+    [titleLabel setTextColor:[UIColor whiteColor]];
+
+    UIBarButtonItem *title = [[UIBarButtonItem alloc] initWithCustomView:titleLabel];
+
+
+    if (TextFieldMode == 1)
+        titleLabel.text = @"Clock In";
+    else
+        titleLabel.text = @"Clock Out";
+    
+    [barItems addObject:title];
+    [barItems addObject:flexSpace];
+    [barItems addObject:doneDateBarBtn];
+    
+    
+    [pickerToolbar setItems:barItems animated:YES];
+    [pickerViewDate addSubview:pickerToolbar];
+    [pickerViewDate addSubview:theDatePicker];
+    [pickerViewDate  showInView:self.view];
+    [pickerViewDate setBounds:CGRectMake(0,0,320, 464)];
+    
+    UITextField *curTextField;
+    if (TextFieldMode == 1)
+        curTextField = _clockInTextField;
+    else
+        curTextField = _clockOutTextField;
+    if (![curTextField.text isEqualToString:@""])
+        theDatePicker.date = [formatterDateTime12 dateFromString:curTextField.text];
+    else
+        curTextField.text = [formatterDateTime12 stringFromDate:theDatePicker.date];
+ */
+    
+}
+ 
+
+- (IBAction)clockInTouchDown:(id)sender {
+    TextFieldMode = 1;
+    [self showDatePicker];
+
+}
+- (IBAction)clockOutTouchDown:(id)sender {
+    TextFieldMode = 2;
+    [self showDatePicker];
+}
+- (IBAction)doDeleteTimeEntry:(id)sender {
+    [self confirmDelete];
+}
+
+-(void)confirmDelete{
+    UIAlertView* alert = [[UIAlertView alloc] initWithTitle:@"Confirm Delete" message:@"Tapping DELETE will remove this record from the system permanently." delegate:self cancelButtonTitle:@"Cancel" otherButtonTitles:@"DELETE", nil];
+    [alert setTag:ALERT_DELETE_ACTION];
+    [alert show];
+}
+
+-(void)doConfirmedDeleteTimeEntry{
+    [self startSpinner ];
+    [self callDeleteTimeEntryWebService];
+}
+
+//#define MINIMUM_ZOOM 0.014
+//#define ANNOTATION_REGION_PAD_FACTOR 3.15
+//#define MAX_DEGREES 360
+
+#pragma mark AlertView Actions
+- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex{
+    switch (alertView.tag) {
+        case ALERT_DELETE_ACTION:
+        {
+            if (buttonIndex == 1)
+                [self doConfirmedDeleteTimeEntry];
+        }break;
+            
+        default:
+            break;
+    }
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+{
+    return 1;
+    
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+        
+    return 60.0;
+}
+
+
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{
+    
+    return 2;
+    
+    
+}
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    static NSString *CellIdentifier = @"Cell";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:CellIdentifier];
+    if (cell == nil) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:CellIdentifier];
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+    }
+    if (indexPath.row == 0)
+    {
+        cell.textLabel.text = @"View Map";
+        cell.imageView.image = [UIImage imageNamed:@"map-marker.png"];
+    }
+    else
+    {
+        cell.textLabel.text = @"View History";
+        cell.imageView.image = [UIImage imageNamed:@"notepad.png"];
+    }
+    return cell;
+}
+
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    //if View map was selected
+    if (indexPath.row == 0)
+    {
+        //if the employee disabled the GPS tracking
+        if ([clockInGpsDataStatus isEqualToString:@"DISABLED"])
+        {
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Unable to view Map. Employee has turned off Location Services on their device. They will need to turn it on for this feature to work" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+            
+        }
+        //if we don't have any GPS recording like for an add time entry vs a clock in
+        else if ((self.clockInLocation.latitude == 0) && (self.clockOutLocation.latitude == 0))
+        {
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"No GPS information available for this time entry" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+           
+        }
+
+        else
+
+            [self showMapView];
+    }
+    else
+        [self showHistoryView];
+}
+
+
+-(void) showHistoryView{
+    UIStoryboard *storyboard;
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+    } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+    }
+    
+    TimeEntryHistoryViewController *historyViewController = [storyboard instantiateViewControllerWithIdentifier:@"TimeEntryHistory"];
+    
+    historyViewController.timeEntryID = timeEntryID;
+    historyViewController.clockInDateTime = clockInDateTime;
+    historyViewController.clockOutDateTime = clockOutDateTime;
+    historyViewController.employeeName = employeeName;
+    
+    historyViewController.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+    
+    [self.navigationController pushViewController:historyViewController animated:YES];
+}
+
+-(void) showMapView{
+    UIStoryboard *storyboard;
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+    } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+    }
+    
+    MapViewController *mapViewController = [storyboard instantiateViewControllerWithIdentifier:@"MapView"];
+    
+    mapViewController.clockInLocation = self.clockInLocation;
+    mapViewController.clockOutLocation = self.clockOutLocation;
+    
+    mapViewController.employeeName = self.employeeName;
+    
+    
+    mapViewController.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+    
+    [self.navigationController pushViewController:mapViewController animated:YES];
+    
+}
+
+- (BOOL)disablesAutomaticKeyboardDismissal {
+    return NO;
+}
+//- (BOOL)textViewShouldEndEditing:(UITextView *)textView {
+//    [textView resignFirstResponder];
+//    return YES;
+//}
+
+@end

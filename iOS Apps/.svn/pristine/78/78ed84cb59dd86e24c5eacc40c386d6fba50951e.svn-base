@@ -1,0 +1,96 @@
+//
+//  NSString+Extensions.m
+//  ezClocker
+//
+//  Created by Kenneth Lewis on 12/14/15.
+//  Copyright © 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "NSString+Extensions.h"
+#import "NSDate+Extensions.h"
+
+@implementation NSString (NSStringExtensions)
+
++ (BOOL)isEquals:(NSString*)src dest:(NSString*)aDest
+{
+    if ([NSString isNilOrEmpty:src] && [NSString isNilOrEmpty:aDest]) {
+        return TRUE;
+    }
+    return (nil != src && nil != aDest && [src isEqualToString:aDest]);
+}
+
++ (NSString *)trim:(NSString *)str
+{
+    if ([NSString isNilOrEmpty:str])
+    {
+        return @"";
+    }
+    return [str stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
+
++ (BOOL)isNilOrEmpty:(NSString *)str
+{
+    if (str == (NSString*)[NSNull null]) {
+        return TRUE;
+    }
+    if ((nil == str) || [str isEqualToString:@""]) {
+        return TRUE;
+    }
+    return FALSE;
+}
+
+- (NSString*)URLUTF8Encode {
+    return [self stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
+}
+
+// yyyy-MM-dd'T'HH:mm:ssZ
+- (NSDate*)toUTCDateTime {
+    NSDate* result = [NSDate fromUTCDateTime:self];
+    return result;
+}
+
+// MM/dd/yyyy
+- (NSDate*)toDefaultDate {
+    NSDate* result = [NSDate toDate:self withFormat:kDefaultDateFormat withTimeZone:nil];
+    return result;
+}
+
++ (NSString*)cstr:(const char*)cstr {
+    if (cstr != 0 && (strlen(cstr) > 0)) {
+        NSString* str = [NSString stringWithUTF8String:cstr];
+        return str;
+    }
+    return @"";
+}
+
+- (NSString*)cleanUpDeviceToken {
+    NSString* test = [NSString trim:self];
+    if ([NSString isNilOrEmpty:test]) {
+        return @"";
+    }
+    test = [test stringByReplacingOccurrencesOfString:@" " withString:@""];
+    test = [test stringByReplacingOccurrencesOfString:@">" withString:@""];
+    test = [test stringByReplacingOccurrencesOfString:@"<" withString:@""];
+    return test;
+}
+
+- (NSDate*)toLongDateTime {
+    if ([NSString isNilOrEmpty:self]) {
+        return nil;
+    }
+    NSDate* result = [NSDate toDate:self withFormat:kLongDateTimeFormat withTimeZone:nil];
+    return result;
+}
+
+- (NSString*)toUTCDateTimeForURL {
+    if ([NSString isNilOrEmpty:self]) {
+        return @"";
+    }
+    NSDate* longDateTime = [self toLongDateTime];
+    if (nil == longDateTime) {
+        return @"";
+    }
+    return [longDateTime toUTCDateTimeStringForURL];
+}
+
+@end

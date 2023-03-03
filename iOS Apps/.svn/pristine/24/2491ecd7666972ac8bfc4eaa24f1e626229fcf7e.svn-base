@@ -1,0 +1,243 @@
+//
+//  CommonLib.m
+//  TCS Mobile
+//
+//  Created by Raya Khashab on 7/21/12.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "CommonLib.h"
+#import "Reachability.h"
+#import "user.h"
+#import <sys/utsname.h>
+
+@implementation CommonLib
++ (NSString*)errorMsg:(NSInteger)errorCode {
+    switch(errorCode) {
+        case SERVICE_UNAVAILABLE_ERROR:
+            return @"Service is unavailable.  No internet connection.";
+        case DATAMANAGER_BUSY:
+            return @"Busy, please wait...";
+        case DATAMANAGER_EMPLOYEE_NOT_SET:
+            return @"No employee has been selected to work with.";
+        case DATAMANAGER_NO_PENDING_UPDATES:
+            return @"No pending updates exist.";
+        case SERVICE_ERRORCODE_SUCCESSFUL:
+            return @"Successful";
+        case SERVICE_ERRORCODE_SUCCESSFUL_NOTHING_TO_DO:
+            return @"It was successful but nothing to do.";
+        case SERVICE_ERRORCODE_ALREADY_CLOCKED_IN:
+            return @"Already clocked in.";
+        case SERVICE_ERRORCODE_ALREADY_CLOCKED_OUT:
+            return @"Already clocked out.";
+        case WEB_SERVICE_OUT_OF_RANGE_ERROR:
+            return @"Web service is out of range.";
+        case WEB_SERVICE_ACCOUNT_EXIST_ERROR:
+            return @"Web service account exist error.";
+        default:
+            return @"Unknown Error.";
+    }
+}
+
+
+- (NSString *) loginFilePath
+{
+    NSArray *path =
+    NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    
+    return [[path objectAtIndex:0] stringByAppendingPathComponent:@"savefile.plist"];
+    
+}
+
+
++(BOOL)isVersion6AndBelow{
+    
+    return floor(NSFoundationVersionNumber) <= NSFoundationVersionNumber_iOS_6_1;
+}
+
++(BOOL)isProduction{
+    NSString *url = SERVER_URL;
+    if ([url isEqualToString:@"https://ezclocker.com/" ])
+        return YES;
+    else
+        return NO;
+}
+
++(BOOL) DoWeHaveNetworkConnection
+{
+    
+    @synchronized(self) {
+        Reachability *networkReachability = [Reachability reachabilityForInternetConnection];
+        
+        NetworkStatus networkStatus = [networkReachability currentReachabilityStatus];
+        if (networkStatus == NotReachable) {
+            return NO;
+            
+        } else {
+            return YES;
+        }
+    }
+}
+
++ (BOOL)validateEmail:(NSString *)emailStr {
+    bool isValid = true;
+    //test for empty emails
+    if (emailStr.length == 0)
+        isValid = false;
+    else{
+        NSString *emailRegex = @"[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,4}";
+        NSPredicate *emailTest = [NSPredicate predicateWithFormat:@"SELF MATCHES %@", emailRegex];
+        if  ([emailTest evaluateWithObject:emailStr] != YES && [emailStr length]!=0)
+            isValid = false;
+        //test for whiteoaksoll@browart23
+        //test for me@gmail..com or me@gmail.con errors
+        else
+        {
+            if (([emailStr containsString:@".."]) || ([emailStr containsString:@"@."]) || ([emailStr hasSuffix:@".con"]))
+                isValid = false;
+        }
+    }
+    return isValid;
+}
+
++ (NSInteger)daysBetweenDate:(NSDate*)fromDateTime andDate:(NSDate*)toDateTime
+{
+    NSDate *fromDate = nil;
+    NSDate *toDate = nil;
+    
+    NSCalendar *calendar = [NSCalendar currentCalendar];
+    
+    [calendar rangeOfUnit:NSCalendarUnitDay startDate:&fromDate
+                 interval:NULL forDate:fromDateTime];
+    [calendar rangeOfUnit:NSCalendarUnitDay startDate:&toDate
+                 interval:NULL forDate:toDateTime];
+    
+    NSDateComponents *difference = [calendar components:NSCalendarUnitDay
+                                               fromDate:fromDate toDate:toDate options:0];
+    
+    return [difference day];
+}
+
+static UIColor* hatchedBackColor = nil;
+
++ (UIColor*)getHatchedBackColor {
+    if (nil == hatchedBackColor) {
+//        UIImage* backImage = [UIImage imageNamed:@"HatchedColor.png"];
+//        hatchedBackColor = [[UIColor alloc] initWithPatternImage:backImage];
+        hatchedBackColor = UIColorFromRGB(LIGHT_RED_COLOR);
+    }
+    return hatchedBackColor;
+}
+
++ (NSString*) getDeviceName
+{
+    struct utsname systemInfo;
+    
+    uname(&systemInfo);
+    
+    NSString* code = [NSString stringWithCString:systemInfo.machine
+                                        encoding:NSUTF8StringEncoding];
+    
+    static NSDictionary* deviceNamesByCode = nil;
+    
+    if (!deviceNamesByCode) {
+        
+        deviceNamesByCode = @{@"i386"      :@"Simulator",
+                              @"x86_64"    :@"Simulator",
+                              @"iPod1,1"   :@"iPod Touch",        // (Original)
+                              @"iPod2,1"   :@"iPod Touch",        // (Second Generation)
+                              @"iPod3,1"   :@"iPod Touch",        // (Third Generation)
+                              @"iPod4,1"   :@"iPod Touch",        // (Fourth Generation)
+                              @"iPod7,1"   :@"iPod Touch",        // (6th Generation)
+                              @"iPhone1,1" :@"iPhone",            // (Original)
+                              @"iPhone1,2" :@"iPhone",            // (3G)
+                              @"iPhone2,1" :@"iPhone",            // (3GS)
+                              @"iPad1,1"   :@"iPad",              // (Original)
+                              @"iPad2,1"   :@"iPad 2",            //
+                              @"iPad3,1"   :@"iPad",              // (3rd Generation)
+                              @"iPhone3,1" :@"iPhone 4",          // (GSM)
+                              @"iPhone3,3" :@"iPhone 4",          // (CDMA/Verizon/Sprint)
+                              @"iPhone4,1" :@"iPhone 4S",         //
+                              @"iPhone5,1" :@"iPhone 5",          // (model A1428, AT&T/Canada)
+                              @"iPhone5,2" :@"iPhone 5",          // (model A1429, everything else)
+                              @"iPad3,4"   :@"iPad",              // (4th Generation)
+                              @"iPad2,5"   :@"iPad Mini",         // (Original)
+                              @"iPhone5,3" :@"iPhone 5c",         // (model A1456, A1532 | GSM)
+                              @"iPhone5,4" :@"iPhone 5c",         // (model A1507, A1516, A1526 (China), A1529 | Global)
+                              @"iPhone6,1" :@"iPhone 5s",         // (model A1433, A1533 | GSM)
+                              @"iPhone6,2" :@"iPhone 5s",         // (model A1457, A1518, A1528 (China), A1530 | Global)
+                              @"iPhone7,1" :@"iPhone 6 Plus",     //
+                              @"iPhone7,2" :@"iPhone 6",          //
+                              @"iPhone8,1" :@"iPhone 6S",         //
+                              @"iPhone8,2" :@"iPhone 6S Plus",    //
+                              @"iPhone8,4" :@"iPhone SE",         //
+                              @"iPhone9,1" :@"iPhone 7",          //
+                              @"iPhone9,3" :@"iPhone 7",          //
+                              @"iPhone9,2" :@"iPhone 7 Plus",     //
+                              @"iPhone9,4" :@"iPhone 7 Plus",     //
+                              
+                              @"iPad4,1"   :@"iPad Air",          // 5th Generation iPad (iPad Air) - Wifi
+                              @"iPad4,2"   :@"iPad Air",          // 5th Generation iPad (iPad Air) - Cellular
+                              @"iPad4,4"   :@"iPad Mini",         // (2nd Generation iPad Mini - Wifi)
+                              @"iPad4,5"   :@"iPad Mini",         // (2nd Generation iPad Mini - Cellular)
+                              @"iPad4,7"   :@"iPad Mini",         // (3rd Generation iPad Mini - Wifi (model A1599))
+                              @"iPad6,7"   :@"iPad Pro (12.9\")", // iPad Pro 12.9 inches - (model A1584)
+                              @"iPad6,8"   :@"iPad Pro (12.9\")", // iPad Pro 12.9 inches - (model A1652)
+                              @"iPad6,3"   :@"iPad Pro (9.7\")",  // iPad Pro 9.7 inches - (model A1673)
+                              @"iPad6,4"   :@"iPad Pro (9.7\")"   // iPad Pro 9.7 inches - (models A1674 and A1675)
+                              };
+    }
+    
+    NSString* deviceName = [deviceNamesByCode objectForKey:code];
+    
+    if (!deviceName) {
+        // Not found on database. At least guess main device type from string contents:
+        
+        if ([code rangeOfString:@"iPod"].location != NSNotFound) {
+            deviceName = @"iPod Touch";
+        }
+        else if([code rangeOfString:@"iPad"].location != NSNotFound) {
+            deviceName = @"iPad";
+        }
+        else if([code rangeOfString:@"iPhone"].location != NSNotFound){
+            deviceName = @"iPhone";
+        }
+        else {
+            deviceName = @"Unknown";
+        }
+    }
+    
+    return deviceName;
+}
+
+
+NSString const *PASSCODE_SYMBOL = @"•";
+
+int const EZCLOCKER_BLUE_COLOR = 0x2419b2;
+
+int const ORANGE_COLOR = 0xFF9900;
+
+int const DARK_ORANGE_COLOR = 0xB26218;
+//int const GRAY_BACKGROUND_COLOR = 0xDCDCDC;
+//this one seems the sam
+//int const GRAY_BACKGROUND_COLOR = 0xE9E9E9;
+int const GRAY_TEXT_COLOR = 0x808080;
+int const GRAY_BACKGROUND_COLOR = 0xF1F1F1;
+int const GRAY_BACKGROUND_DARK_COLOR = 0xDCDCDC;
+
+int const GREEN_CLOCKEDIN_COLOR = 0x58B100;
+
+int const BLUE_TOOLBAR_COLOR = 0x63a8cc;
+int const GRAY_WEBSITE_COLOR = 0x6d6e70;
+
+//int const BABY_BLUE_COLOR = 0x6599FF;
+int const BABY_BLUE_COLOR = 0x66CCFF;
+
+int const LIGHT_RED_COLOR = 0xdd7e6b;//0xCC4125;
+
+
+//int const BABY_BLUE_COLOR = 0x34BFF3;
+
+
+
+@end

@@ -1,0 +1,132 @@
+//
+//  CommonLib.h
+//  TCS Mobile
+//
+//  Created by Raya Khashab on 7/21/12.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+
+#import <UIKit/UIKit.h>
+
+typedef enum {
+	ClockModeIn = 0,
+	ClockModeOut = 1,
+} ClockMode;
+
+#define TIME_OUT_REQUEST 60 //in seconds
+
+
+#define UIColorFromRGB(rgbValue) [UIColor colorWithRed:((float)((rgbValue & 0xFF0000) >> 16))/255.0 green:((float)((rgbValue & 0xFF00) >> 8))/255.0 blue:((float)(rgbValue & 0xFF))/255.0 alpha:1.0]
+
+
+#define SERVICE_UNAVAILABLE_ERROR 503
+#define SERVICE_FORBIDEN_ERROR 403
+#define UNKNOWN_ERROR -999
+
+#define DATAMANAGER_BUSY -1001
+#define DATAMANAGER_EMPLOYEE_NOT_SET -1002
+#define DATAMANAGER_NO_PENDING_UPDATES -1003
+
+#define SERVICE_ERRORCODE_SUCCESSFUL 0
+#define SERVICE_ERRORCODE_SUCCESSFUL_NOTHING_TO_DO -1
+#define SERVICE_ERRORCODE_ALREADY_CLOCKED_IN 1
+#define SERVICE_ERRORCODE_ALREADY_CLOCKED_OUT 2
+#define SERVICE_ERRORCODE_UNKNOWN_ERROR 3
+
+#define WEB_SERVICE_OUT_OF_RANGE_ERROR 6
+#define WEB_SERVICE_ACCOUNT_EXIST_ERROR 8
+
+#define DISABLE_LOCATION_REMINDER_DIALOG_KEY @"DISABLE_LOCATION_REMINDER_DIALOG_KEY"
+#define ALERT_DELETE_ACTION 1
+
+#define MAX_TIMES_APP_LAUNCHED 10
+
+//the personal employer ID is different between dev and prod
+#ifndef RELEASE
+#define PERSONAL_EMPLOYERID 20
+#else
+#define PERSONAL_EMPLOYERID 176
+#endif
+
+//use these to notify the timesheetdetail controller if we are modifying active clock ins or outs
+//so the screen can hide some controls or display a message when users try to add a clock out in an active clock in situation
+#define NON_ACTIVE_CLOCK 0
+#define ACTIVE_CLOCKIN  1
+#define ACTIVE_CLOCKOUT 2
+#define EDIT_ACTIVE_CLOCK 3
+
+extern NSString const *PASSCODE_SYMBOL;
+
+extern int const BLUE_TOOLBAR_COLOR;
+
+extern int const GRAY_BACKGROUND_COLOR;
+
+extern int const GRAY_BACKGROUND_DARK_COLOR;
+
+extern int const GREEN_CLOCKEDIN_COLOR;
+
+extern int const ORANGE_COLOR;
+
+extern int const BABY_BLUE_COLOR;
+
+extern int const LIGHT_RED_COLOR;
+
+extern int const EZCLOCKER_BLUE_COLOR;
+
+extern int const DARK_ORANGE_COLOR;
+
+@interface CommonLib : NSObject
+
++(BOOL)isProduction;
+
++(BOOL)DoWeHaveNetworkConnection;
+
++ (BOOL)validateEmail:(NSString *)emailStr;
+
++ (NSInteger)daysBetweenDate:(NSDate*)fromDateTime andDate:(NSDate*)toDateTime;
+
++ (NSString*)errorMsg:(NSInteger)errorCode;
+
++ (UIColor*)getHatchedBackColor;
+
+#define CLOCK_IN_CLOCK_OUT_PENDING_UPDATES_CHECK(CLOCK_IN_OUT_STR) \
+DataManager* manager = [DataManager sharedManager]; \
+NSError* error = nil; \
+NSInteger __block count = [manager doesCurrentEmployeeNeedingSubmission:&error]; \
+if (count > 0) { \
+if ([CommonLib DoWeHaveNetworkConnection]) { \
+if (manager.isBackgroundProcessing) { \
+NSString* msg = [NSString stringWithFormat:@"Pending Updates are currently syncing to the server.  Please try %@ later.", CLOCK_IN_OUT_STR]; \
+[SharedUICode messageBox:nil message:msg withCompletion:nil]; \
+return; \
+} \
+if (manager.isBusy) { \
+NSString* msg = [NSString stringWithFormat:@"Please wait for process to finish and try %@ later.", CLOCK_IN_OUT_STR]; \
+[SharedUICode messageBox:nil message:msg withCompletion:nil]; \
+return; \
+} \
+[self startSpinnerWithMessage:@"Syncing, please wait..."]; \
+[manager forceSyncWithCompletion:^(UIBackgroundFetchResult result, NSInteger errorCode, NSError * _Nullable error) { \
+[self stopSpinner]; \
+if (errorCode != SERVICE_ERRORCODE_SUCCESSFUL) { \
+NSString* msg = [NSString stringWithFormat:@"There was an error Syncing Pending Changes.  Please try %@ later.", CLOCK_IN_OUT_STR]; \
+[SharedUICode messageBox:nil message:msg withCompletion:nil]; \
+return; \
+} else { \
+count = [manager doesCurrentEmployeeNeedingSubmission:&error]; \
+if (count > 0) { \
+[SharedUICode displayPendingUpdates]; \
+return; \
+} \
+} \
+}]; \
+return; \
+} \
+} \
+if ([manager isBusy]) { \
+[SharedUICode displayServerIsBusy]; \
+return; \
+}
+
+@end

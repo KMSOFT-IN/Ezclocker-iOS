@@ -1,0 +1,23 @@
+//
+//  DeletedTimeEntry+CoreDataProperties.h
+//  ezClocker
+//
+//  Created by Kenneth Lewis on 1/19/16.
+//  Copyright © 2016 ezNova Technologies LLC. All rights reserved.
+//
+//  Choose "Create NSManagedObject Subclass…" from the Core Data editor menu
+//  to delete and recreate this implementation file for your updated model.
+//
+
+#import "DeletedTimeEntry.h"
+
+NS_ASSUME_NONNULL_BEGIN
+
+@interface DeletedTimeEntry (CoreDataProperties)
+
+@property (nullable, nonatomic, retain) NSNumber *timeEntryID;
+@property (nullable, nonatomic, retain) Employee *employee;
+
+@end
+
+NS_ASSUME_NONNULL_END

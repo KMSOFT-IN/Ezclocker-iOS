@@ -1,0 +1,117 @@
+//
+//  LocationManager.m
+//  ezClocker
+//
+//  Created by johnny_bynum on 12/20/13.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+// *** IMPORTANT- when using this singleton, you must link the
+// CoreLocation lib else you will get a link error on compile **
+
+#import "LocationManager.h"
+
+@interface LocationManager (){
+    CLLocationManager *locationManager;
+}
+@end
+
+@implementation LocationManager
+
+@synthesize locationManager, delegate;
+
+#define kDefaultAcceptableAccuracy  1000 //acceptable min accuracy in meters
+
+static LocationManager* _defaultLocationManager = nil;
+
++(LocationManager*)defaultLocationManager{
+    @synchronized(self){
+        if (!_defaultLocationManager) {
+            _defaultLocationManager = [[super allocWithZone:NULL] init];
+        }
+        return _defaultLocationManager;
+    }
+}
+
++ (id)allocWithZone:(NSZone *)zone
+{
+    return [self defaultLocationManager];
+}
+
+- (id)init {
+    self = [super init];
+    if (self != nil) {
+        locationManager = [[CLLocationManager alloc] init];
+        self.locationManager.delegate = self;
+        self.locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation;
+    }
+    return self;
+}
+
+- (void)locationManager:(CLLocationManager *)manager
+    didUpdateToLocation:(CLLocation *)newLocation
+           fromLocation:(CLLocation *)oldLocation
+{
+    CLLocation *aNewLocation = newLocation;
+    aNewLocation = newLocation;
+    if ((delegate) && ([delegate respondsToSelector:@selector(locationUpdate:)]))
+        [self.delegate locationUpdate:aNewLocation];
+}
+
+- (void)locationManager:(CLLocationManager *)manager
+       didFailWithError:(NSError *)error
+{
+#ifndef RELEASE
+	NSLog(@"ERROR: LOCATION ERROR: Cannot get location: %@", [error description]);
+#endif
+    if ((delegate != nil) && [delegate respondsToSelector:@selector(locationError:)])
+        [self.delegate locationError:error];
+}
+
+-(void)giveUpdatesOnlyMovedThanThisDistance:(CLLocationDistance)distance{
+    [self stopTracking];
+    self.locationManager.distanceFilter = distance;
+    
+    if ([self.locationManager respondsToSelector:@selector(requestWhenInUseAuthorization)]) {
+        [self.locationManager requestWhenInUseAuthorization];
+    }
+
+    [self.locationManager startUpdatingLocation];
+}
+
+-(void)stopTracking{
+    [self.locationManager stopUpdatingLocation];
+    [self.locationManager stopMonitoringSignificantLocationChanges];
+    if (nil != delegate  && [delegate respondsToSelector:@selector(locationTrackingDidStop)]) {
+        [self.delegate locationTrackingDidStop];
+    }
+}
+
+-(void)startTracking{
+    [self.locationManager stopMonitoringSignificantLocationChanges];
+    
+    if ([self.locationManager respondsToSelector:@selector(requestWhenInUseAuthorization)]) {
+        [self.locationManager requestWhenInUseAuthorization];
+    }
+    
+        [self.locationManager startUpdatingLocation];
+}
+-(void)startSignificantLocationChangeTracking{
+    [self.locationManager stopUpdatingLocation];
+    [self.locationManager startMonitoringSignificantLocationChanges];
+}
+
+-(CLLocation*)lastKnownLocation{
+    return self.locationManager.location;
+}
+
+
+- (void)releaseAll {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    delegate = nil;
+}
+
+-(void)dealloc{
+    [self releaseAll];
+}
+@end
+

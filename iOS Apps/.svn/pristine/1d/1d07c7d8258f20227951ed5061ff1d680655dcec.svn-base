@@ -1,0 +1,442 @@
+//
+//  RemindersViewController.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 04/04/14.
+//  Copyright (c) 2014 ezNova Technologies LLC. All rights reserved.
+
+
+#import "RemindersViewController.h"
+#import "user.h"
+#import "CommonLib.h"
+#import "ECSlidingViewController.h"
+#import "AddReminderViewController.h"
+
+@interface RemindersViewController ()
+
+@end
+
+@implementation RemindersViewController
+@synthesize locationPicker = _locationPicker;
+@synthesize delegate = _delegate;
+
+- (id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
+{
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    if (self) {
+        // Custom initialization
+    }
+    return self;
+}
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    editingEnabled = YES;
+    // Do any additional setup after loading the view from its nib.
+    formatterDateTime12 = [[NSDateFormatter alloc] init];
+    [formatterDateTime12 setDateFormat:@"h:mm a"];
+    formatterTime = [[NSDateFormatter alloc] init];
+    [formatterTime setDateFormat:@"HH:mm"];   
+    
+    curClockMode = ClockModeIn;
+    
+   // UIBarButtonItem* addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(doAdd)];
+  //  UIBarButtonItem* saveButton = [[UIBarButtonItem alloc] initWithTitle:@"Save" style:UIBarButtonItemStylePlain target:self action:@selector(doSave)];
+    
+    
+  //  self.navigationItem.rightBarButtonItem = addButton;
+
+
+
+}
+
+- (void)viewDidUnload
+{
+    [super viewDidUnload];
+    // Release any retained subviews of the main view.
+    // e.g. self.myOutlet = nil;
+    
+
+}
+
+- (void)viewWillAppear:(BOOL)animated
+{
+	[super viewWillAppear: animated];
+    NSDate *date;
+    UserClass *user = [UserClass getInstance];
+
+    if ([user.clockInReminders count] > 0)
+    {
+        theDatePicker.date = date;
+        //hide the label that says no alarms
+        _clockInTable.hidden = false;
+        _noClockInLabel.hidden = true;
+    }
+    else{
+        _clockInTable.hidden = true;
+        _noClockInLabel.hidden = false;
+        
+    }
+    if ([user.clockOutReminders count] > 0)
+    {
+        _clockOutTabel.hidden = false;
+        _noClockOutLabel.hidden = true;
+
+    }
+    else{
+        _clockOutTabel.hidden = true;
+        _noClockOutLabel.hidden = false;
+        
+    }
+
+    self.view.backgroundColor = UIColorFromRGB(GRAY_BACKGROUND_COLOR);
+
+
+    
+}
+
+- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
+{
+    return (interfaceOrientation == UIInterfaceOrientationPortrait);
+}
+
+
+- (void)showAddReminder: (int) clockMode {
+    
+    AddReminderViewController *controller = [self.storyboard instantiateViewControllerWithIdentifier:@"AddReminder"];
+    
+    controller.curClockMode = clockMode;
+    
+    UINavigationController *addReminderNavigationController = [[UINavigationController alloc] initWithRootViewController:controller];
+    
+    
+    controller.delegate = (id) self;
+    controller.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+    
+    [self presentViewController:addReminderNavigationController animated:YES completion:nil];
+
+}
+
+-(void) scheduleNotificationForDate: (NSString *) clockReminderTime message: (NSString *)notificationMessage{
+    UILocalNotification *localNotification = [[UILocalNotification alloc] init];
+    
+    //figure out the time
+    NSCalendar *calendar = [NSCalendar currentCalendar]; // gets default calendar
+    NSDateComponents *components = [calendar components:(NSYearCalendarUnit | NSMonthCalendarUnit |  NSDayCalendarUnit | NSHourCalendarUnit | NSMinuteCalendarUnit) fromDate:[NSDate date]]; // gets the year, month, day,hour and minutesfor today's date
+    
+    int intHHValue = [[clockReminderTime substringToIndex:2] intValue];
+    int intmmValue = [[clockReminderTime substringFromIndex:3] intValue];
+    
+    [components setHour:intHHValue];
+    [components setMinute:intmmValue];
+    
+    localNotification.fireDate = [calendar dateFromComponents:components];
+    
+    
+    localNotification.timeZone = [NSTimeZone defaultTimeZone];
+    localNotification.alertBody = [NSString stringWithFormat:@"Please remember to %@", notificationMessage]; 
+    localNotification.alertAction = NSLocalizedString(@"View details", nil);
+    
+    /* Here we set notification sound and badge on the app's icon "-1" 
+     means that number indicator on the badge will be decreased by one 
+     - so there will be no badge on the icon */
+    
+    localNotification.repeatInterval = NSWeekdayCalendarUnit;
+    localNotification.soundName = UILocalNotificationDefaultSoundName;
+    localNotification.applicationIconBadgeNumber = -1;
+    
+    [[UIApplication sharedApplication] scheduleLocalNotification:localNotification];
+    
+    
+}
+
+-(void)touchesBegan:(NSSet*)trigger withEvent:(UIEvent*)event{
+    UITouch *touch = [trigger anyObject];
+    
+    if((touch.view.tag == 1) || (touch.view.tag == 2)){
+        [self showDatePicker];
+        
+  /*      CGRect pickerFrame = CGRectMake(0,245,320,216);
+        pickTime = [[UIDatePicker alloc]initWithFrame:pickerFrame];
+        
+        [pickTime addTarget:self action:@selector(dateSelected:)forControlEvents:UIControlEventValueChanged];
+        [self.view addSubview:pickTime];
+        pickTime.datePickerMode = UIDatePickerModeTime;
+        if (touch.view.tag == 1){
+            TextFieldMode = 1;
+            if (![clockInLabel.text isEqualToString:@""])
+                pickTime.date = [formatterDateTime12 dateFromString:clockInLabel.text];
+        }
+        else {
+            TextFieldMode = 2;
+            if (![clockOutLabel.text isEqualToString:@""])
+                pickTime.date = [formatterDateTime12 dateFromString:clockOutLabel.text];
+        }
+   */
+    }
+}
+
+-(BOOL)closeDatePicker:(id)sender{
+    [pickerViewDate dismissWithClickedButtonIndex:0 animated:YES];
+    return YES;
+}
+
+
+-(IBAction)DatePickerDoneClick{
+    
+    [self closeDatePicker:self];
+    
+}
+
+-(void) showDatePicker{
+    
+    theDatePicker.datePickerMode = UIDatePickerModeTime;
+    
+    NSMutableArray *barItems = [[NSMutableArray alloc] init];
+    
+    UIBarButtonItem *doneDateBarBtn = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(DatePickerDoneClick)];
+    
+    UIBarButtonItem *flexSpace = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:self action:nil];
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0.0 , 11.0f, 150, 20.0f)];
+    
+    [titleLabel setBackgroundColor:[UIColor clearColor]];
+    [titleLabel setTextColor:[UIColor whiteColor]];
+    
+    UIBarButtonItem *title = [[UIBarButtonItem alloc] initWithCustomView:titleLabel];
+    
+    
+    if (curClockMode == ClockModeIn)
+        titleLabel.text = @"Clock In Reminder";
+    else
+        titleLabel.text = @"Clock Out Reminder";
+    
+    [barItems addObject:title];
+    [barItems addObject:flexSpace];
+    [barItems addObject:doneDateBarBtn];
+    
+    
+    [pickerToolbar setItems:barItems animated:YES];
+    [pickerViewDate addSubview:pickerToolbar];
+    [pickerViewDate addSubview:theDatePicker];
+    [pickerViewDate  showInView:self.view];
+    [pickerViewDate setBounds:CGRectMake(0,0,320, 464)];
+    
+    
+}
+
+-(void)dateSelected:(id)sender{
+    
+}
+
+- (IBAction)doClearAllReminders:(id)sender {
+    /* Here we cancel all previously scheduled notifications */
+    [[UIApplication sharedApplication] cancelAllLocalNotifications];
+    UserClass *user = [UserClass getInstance];
+
+    user.remindersSet = NO;
+//    user.clockInReminder =  @"";
+//    user.clockOutReminder = @"";
+
+}
+
+- (IBAction)clockOutTouchDown:(id)sender {
+    TextFieldMode = 2;
+    [self showDatePicker];
+}
+
+- (IBAction)revealMenu:(id)sender {
+    [self.slidingViewController anchorTopViewTo:ECRight];
+}
+
+-(BOOL)textFieldShouldBeginEditing:(UITextField *)textField
+{
+    // Here You can do additional code or task instead of writing with keyboard
+    return NO;
+}
+
+- (IBAction)doTouchDown:(id)sender {
+    TextFieldMode = 2;
+    [self showDatePicker];
+}
+- (IBAction)doClockOutTouchDown:(id)sender {
+    TextFieldMode = 2;
+    [self showDatePicker];
+}
+
+
+- (void) addReminderViewControllerDidFinish:(UIViewController *)controller reminder:(Reminder *) newReminder clockMode:(int)clockMode
+{
+    curClockMode = clockMode;
+   // TextFieldMode = 1;
+    UserClass *user = [UserClass getInstance];
+    if (clockMode == ClockModeIn){
+        [user.clockInReminders  addObject:newReminder];
+
+
+        [_clockInTable reloadData];
+    }
+    else
+    {
+        [user.clockOutReminders  addObject:newReminder];
+
+        [_clockOutTabel reloadData];
+    }
+    
+    if (newReminder != nil)
+    {
+        //save the reminder
+//        NSUserDefaults *def = [NSUserDefaults standardUserDefaults];
+//        [def setObject:[NSKeyedArchiver archivedDataWithRootObject:user.clockInReminders] forKey:@"ClockInReminders"];
+//        [def synchronize];
+//        [[NSUserDefaults standardUserDefaults] setObject:user.clockInReminders forKey:@"ClockInReminders"];
+ //       [[NSUserDefaults standardUserDefaults] setObject:user.clockOutReminders forKey:@"ClockOutReminders"];
+//        [[NSUserDefaults standardUserDefaults] synchronize];
+    }
+
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+-(void) saveReminders
+{
+    NSMutableArray *arrReminders = [[NSMutableArray alloc] init];
+    UserClass *user = [UserClass getInstance];
+    for(Reminder* reminder in user.clockInReminders) {
+        NSString *strReminder = [NSString stringWithFormat:@"%@", reminder.ID];
+    }
+}
+#pragma mark - Table view data source
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+{
+    return 1;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{
+    UserClass *user = [UserClass getInstance];
+    if (tableView == _clockInTable)
+        return [user.clockInReminders count];
+    else
+        return [user.clockOutReminders count];
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    UserClass *user = [UserClass getInstance];
+    static NSString *CellIdentifier = @"Cell";
+    
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:CellIdentifier];
+    if (cell == nil) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:CellIdentifier];
+        cell.editingAccessoryType = UITableViewCellAccessoryDisclosureIndicator;
+
+    }
+
+    UIFont *myFont = [ UIFont fontWithName: @"helvetica" size: 24.0 ];
+    cell.textLabel.font  = myFont;
+
+    if (tableView == _clockInTable){
+            Reminder *curReminder = [user.clockInReminders objectAtIndex:indexPath.row];
+            cell.textLabel.text = curReminder.time;
+            cell.detailTextLabel.text = [NSString stringWithFormat:@"%@  %@", @"Every:", curReminder.days];
+    }
+    else
+    {
+            Reminder *curReminder = [user.clockOutReminders objectAtIndex:indexPath.row];
+            cell.textLabel.text = curReminder.time;
+            cell.detailTextLabel.text = [NSString stringWithFormat:@"%@  %@", @"Every:", curReminder.days];
+    }
+    return cell;
+}
+
+- (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    return YES;
+}
+
+- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView beginUpdates];
+    Reminder *reminder ;
+    if (editingStyle == UITableViewCellEditingStyleDelete) {
+        // Do whatever data deletion you need to do...
+        // Delete the row from the data source
+        UserClass *user = [UserClass getInstance];
+        if (tableView == _clockInTable) {
+            reminder = [user.clockInReminders objectAtIndex:indexPath.row];
+            [user.clockInReminders removeObjectAtIndex:indexPath.row];
+        }
+        else{
+            reminder = [user.clockOutReminders objectAtIndex:indexPath.row];
+            [user.clockOutReminders removeObjectAtIndex:indexPath.row];
+
+        }
+        //cancel the notificaiton with the ID that matches
+        UILocalNotification *notificationToCancel=nil;
+        for(UILocalNotification *aNotif in [[UIApplication sharedApplication] scheduledLocalNotifications]) {
+            if([[aNotif.userInfo objectForKey:@"ID"] isEqualToString:reminder.ID]) {
+                notificationToCancel=aNotif;
+                break;
+            }
+        }
+        [[UIApplication sharedApplication] cancelLocalNotification:notificationToCancel];
+        
+        [tableView deleteRowsAtIndexPaths:[NSArray arrayWithObjects:indexPath, nil] withRowAnimation:UITableViewRowAnimationTop];
+    }
+    [tableView endUpdates];
+}
+
+- (UITableViewCellEditingStyle)tableView:(UITableView *)aTableView editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    // Detemine if it's in editing mode
+    if (editingEnabled)
+    {
+        return UITableViewCellEditingStyleDelete;
+    }
+    
+    return UITableViewCellEditingStyleNone;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    AddReminderViewController *controller = [self.storyboard instantiateViewControllerWithIdentifier:@"AddReminder"];
+    
+//    controller.curClockMode = clockMode;
+    
+    UINavigationController *addReminderNavigationController = [[UINavigationController alloc] initWithRootViewController:controller];
+    
+    
+//    controller.delegate = (id) self;
+//    controller.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+    
+//    self.timeSheetDetailViewController.timeEntryID = selectedTimeEntryID;
+//    self.timeSheetDetailViewController.employeeName = employeeName;
+    [self.navigationController pushViewController:controller animated:YES];
+    
+}
+
+- (IBAction)doAddClockInReminder:(id)sender {
+    [self showAddReminder:ClockModeIn];
+}
+
+- (IBAction)doAddClockOutReminder:(id)sender {
+    [self showAddReminder:ClockModeOut];
+}
+- (IBAction)doEditCell:(id)sender {
+    if ([_editButton.title isEqualToString: @"Edit"])
+    {
+        editingEnabled = YES;
+        _editButton.title = @"Done";
+        [_clockInTable setEditing:YES animated:YES];
+        [_clockOutTabel setEditing:YES animated:YES];
+        
+    }
+    else
+    {
+        editingEnabled = NO;
+        _editButton.title = @"Edit";
+        [_clockInTable setEditing:NO animated:YES];
+        [_clockInTable setEditing:NO animated:YES];
+    }
+}
+@end

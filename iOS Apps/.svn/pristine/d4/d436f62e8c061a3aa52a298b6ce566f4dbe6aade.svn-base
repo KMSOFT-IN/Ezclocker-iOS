@@ -1,0 +1,222 @@
+//
+//  AddReminderViewController.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 4/9/14.
+//  Copyright (c) 2014 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "AddReminderViewController.h"
+#import "CommonLib.h"
+#import "user.h"
+
+@interface AddReminderViewController ()
+
+@end
+
+@implementation AddReminderViewController
+
+- (id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
+{
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    if (self) {
+        // Custom initialization
+    }
+    return self;
+}
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+	// Do any additional setup after loading the view.
+    weekdays = [NSArray arrayWithObjects:@"Every Sunday", @"Every Monday", @"Every Tuesday", @"Every Wednesday", @"Every Thursday", @"Every Friday", @"Every Saturday", nil];
+    formatterDateTime12 = [[NSDateFormatter alloc] init];
+    [formatterDateTime12 setDateFormat:@"h:mm a"];
+    formatterDateTime = [[NSDateFormatter alloc] init];
+    [formatterDateTime setDateFormat:@"HHmm"];
+    if (_curClockMode == ClockModeIn)
+        _reminderNavigationItem.title = @"Clock In Reminder";
+    else
+        _reminderNavigationItem.title = @"Clock Out Reminder";
+
+}
+- (void)viewWillAppear:(BOOL)animated
+{
+	[super viewWillAppear: animated];
+    [self clearTableAccessory];
+}
+
+-(void) clearTableAccessory{
+    for (int row = 0; row < [_repeatDaysTable numberOfRowsInSection:0]; row++) {
+        NSIndexPath* cellPath = [NSIndexPath indexPathForRow:row inSection:0];
+        UITableViewCell* cell = [_repeatDaysTable cellForRowAtIndexPath:cellPath];
+        cell.accessoryView = nil;
+    }
+}
+
+- (void)didReceiveMemoryWarning
+{
+    [super didReceiveMemoryWarning];
+    // Dispose of any resources that can be recreated.
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+{
+    return 1;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{
+    return 7;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    static NSString *CellIdentifier = @"Cell";
+    
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:CellIdentifier];
+    if (cell == nil) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:CellIdentifier];
+        cell.accessoryView = nil;
+    }
+    NSString *weekday = [[weekdays objectAtIndex:indexPath.row] copy];
+
+    cell.textLabel.text = weekday;
+
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    UITableViewCell *selectedCell = [tableView cellForRowAtIndexPath:indexPath];
+    if (selectedCell.accessoryView == nil){
+        NSString *cellText = selectedCell.textLabel.text;
+        selectedCell.accessoryView = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"checkbox_new.png"]];
+    }
+    else
+        selectedCell.accessoryView = nil;
+
+    
+}
+
+
+- (IBAction)doCancel:(id)sender {
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (IBAction)doSave:(id)sender {
+    NSString *newString = @"";
+    Reminder *newReminder = [Reminder alloc];
+    newReminder.days = @"";
+    //the newReminder.time will have the display time format like 7:30pm
+    newReminder.time = [formatterDateTime12 stringFromDate:[_timePicker date]];
+    //the targetTime will have the time in a 24hr format like 19:30 for 7:30pm
+    NSString *targetTime = [formatterDateTime stringFromDate:[_timePicker date]];
+    for (int row = 0; row < [_repeatDaysTable numberOfRowsInSection:0]; row++) {
+        NSIndexPath* cellPath = [NSIndexPath indexPathForRow:row inSection:0];
+        UITableViewCell* cell = [_repeatDaysTable cellForRowAtIndexPath:cellPath];
+        if (cell.accessoryView != nil)
+        {
+            newString = [cell.textLabel.text stringByReplacingOccurrencesOfString:@"Every " withString:@""];
+            newString = [newString substringToIndex:3];
+
+            newReminder.days = [NSString stringWithFormat:@"%@ , %@", newReminder.days, newString];
+            
+            //setup a notification for every day selected
+            int dayOfWeek = row + 1;
+            if (_curClockMode == ClockModeIn)
+                newReminder.ID = [self scheduleNotificationForDate: newReminder theDay: dayOfWeek theTime: targetTime message:@"Clock In"];
+            else
+               newReminder.ID = [self scheduleNotificationForDate: newReminder theDay: dayOfWeek theTime: targetTime message:@"Clock Out"];
+
+        }
+    }
+    if([newReminder.days hasPrefix:@" , "])
+        newReminder.days = [newReminder.days substringFromIndex:2];
+
+    
+
+    [self.delegate addReminderViewControllerDidFinish:self.parentViewController reminder:newReminder clockMode:_curClockMode];
+
+
+}
+
+-(NSDate *) getDateOfSpecificDay:(NSInteger ) day // here day will be 1 or 2.. or 7
+{
+    NSInteger desiredWeekday = day;
+    NSRange weekDateRange = [[NSCalendar currentCalendar] maximumRangeOfUnit:NSWeekdayCalendarUnit];
+    NSInteger daysInWeek = weekDateRange.length - weekDateRange.location + 1;
+    
+    NSDateComponents *dateComponents = [[NSCalendar currentCalendar] components:NSWeekdayCalendarUnit fromDate:[NSDate date]];
+    NSInteger currentWeekday = dateComponents.weekday;
+    NSInteger differenceDays = (desiredWeekday - currentWeekday + daysInWeek) % daysInWeek;
+    NSDateComponents *daysComponents = [[NSDateComponents alloc] init];
+
+    daysComponents.day = differenceDays;
+
+    NSDate *resultDate = [[NSCalendar currentCalendar] dateByAddingComponents:daysComponents toDate:[NSDate date] options:0];
+
+
+
+    return resultDate;
+}
+
+-(NSString *) scheduleNotificationForDate: (Reminder *) reminder theDay: (int) day theTime: (NSString *) targetTime message: (NSString *)notificationMessage{
+    NSString *clockReminderTime = targetTime;
+    UILocalNotification *localNotification = [[UILocalNotification alloc] init];
+    
+    //figure out the time
+//    NSCalendar *calendar = [NSCalendar currentCalendar]; // gets default calendar
+//    NSDateComponents *components = [calendar components:(NSYearCalendarUnit | NSMonthCalendarUnit |  NSDayCalendarUnit | NSHourCalendarUnit | NSMinuteCalendarUnit) fromDate:[NSDate date]]; // gets the year, month, day,hour and minutesfor today's date
+    
+    
+    //first set the start date (fireDate) to the first date the event will occur
+    NSDate *fireDate = [self getDateOfSpecificDay: day];
+    
+    //now take that date and set the hour and minute values. Some reason it didn't let me do it in the getDateOfSpecificDay routine
+    NSCalendar *calendar = [NSCalendar currentCalendar];
+    NSDateComponents *components = [calendar components: NSYearCalendarUnit|
+                                    NSMonthCalendarUnit|
+                                    NSDayCalendarUnit
+                                               fromDate:fireDate];
+    int intHHValue = [[clockReminderTime substringToIndex:2] intValue];
+    int intmmValue = [[clockReminderTime substringFromIndex:2] intValue];
+
+    [components setHour:intHHValue];
+    [components setMinute:intmmValue];
+    
+    NSDate *newFireDate = [calendar dateFromComponents:components];
+
+    
+    localNotification.fireDate = newFireDate;
+    
+    NSLog(@"Notification will be shown on: %@ ",localNotification.fireDate);
+    
+    localNotification.timeZone = [NSTimeZone defaultTimeZone];
+    localNotification.alertBody = [NSString stringWithFormat:@"Please remember to %@", notificationMessage];
+    localNotification.alertAction = NSLocalizedString(@"View details", nil);
+    
+    /* Here we set notification sound and badge on the app's icon "-1"
+     means that number indicator on the badge will be decreased by one
+     - so there will be no badge on the icon */
+    
+    localNotification.repeatInterval = NSWeekdayCalendarUnit;
+    localNotification.soundName = UILocalNotificationDefaultSoundName;
+    localNotification.applicationIconBadgeNumber = -1;
+    
+    UserClass *user = [UserClass getInstance];
+ //   NSString *reminderText = [localNotification.userInfo
+  //                            objectForKey:kRemindMeNotificationDataKey];
+
+    NSString *uniqueID = [NSString stringWithFormat:@"%d",user.clockInReminders.count];
+    NSDictionary *userInfo = [NSDictionary dictionaryWithObject:uniqueID forKey:@"ID"];
+    localNotification.userInfo = userInfo;
+
+    NSString *notifyID = [localNotification.userInfo objectForKey:@"ID"];
+    [[UIApplication sharedApplication] scheduleLocalNotification:localNotification];
+    return notifyID;
+    
+    
+}
+
+@end

@@ -1,0 +1,172 @@
+//
+//  SubscriptionWebService.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 11/5/13.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "SubscriptionWebService.h"
+#import "MetricsLogWebService.h"
+#import "user.h"
+
+@implementation SubscriptionWebService
+@synthesize delegate = _delegate;
+
+-(void) callHasValidLicenseWebService{
+    UserClass *user = [UserClass getInstance];
+    
+    NSString *httpPostString;
+    NSString *request_body;
+    
+    
+    httpPostString = [NSString stringWithFormat:@"%@subscriptionPlan/hasValidLicense/%@", SERVER_URL, user.employerID];
+    
+    request_body = [NSString
+                    stringWithFormat:@"authToken=%@",
+                    [user.authToken        stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]
+                    ];
+    
+
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    
+    //set HTTP Method
+    [urlRequest setHTTPMethod:@"POST"];
+    [urlRequest setValue:@"application/json;charset=UTF-8" forHTTPHeaderField:@"Accept"];
+    
+    //set request body into HTTPBody.
+    [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    
+    if (connection){
+    }
+    
+    
+}
+
+-(void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response
+{
+    data = [[NSMutableData alloc] init];
+}
+-(void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)dataIn
+{
+    [data appendData:dataIn];
+}
+
+-(void)connectionDidFinishLoading:(NSURLConnection *)connection
+{
+    UserClass *user = [UserClass getInstance];
+    NSError *error = nil;
+    NSNumber *freeTrialDaysLeft;
+    NSDictionary *results = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
+    NSString *resultMessage = [results valueForKey:@"message"];
+
+
+    if ([resultMessage isEqualToString:@"Success"])
+    {
+        user.availableEmployeeSlots = [results valueForKey:@"availableEmployeeSlots"];
+        //since JSON returns boolean values as NSNumber
+        NSNumber *value = [results valueForKey:@"hasPaidPlan"];
+        bool hasPaidPlan = value.boolValue;
+        value = [results valueForKey:@"paidPlanActive"];
+        bool paidPlanActive = value.boolValue;
+        
+//        bool *tmpFreePlanActive = [[results valueForKey:@"freePlanActive"] boolValue];
+
+        NSDictionary *tmpPlan = [results valueForKey:@"subscriptionPlan"];
+        NSNumber *monthlyFee = [tmpPlan valueForKey:@"monthlyFee"];
+        //Apple shows the subscription as 4.99 not 5 which is what we get from the server.
+        if ([monthlyFee intValue] > 0){
+            double monthlyFee1 = [monthlyFee doubleValue] - 0.01;
+            NSString *appleMonthlyFee = [NSString stringWithFormat:@"$%.02f",monthlyFee1];
+            user.subscription_PlanPrice = appleMonthlyFee;
+            user.subscription_freePlanActive = false;
+        }
+        else
+        {
+            user.subscription_PlanPrice = [NSString stringWithFormat:@"$%.2d",0];
+            user.subscription_freePlanActive = true;
+
+        }
+        
+        NSDateFormatter *formatterDate, *formatterISO8601DateTime;
+        
+        formatterISO8601DateTime = [[NSDateFormatter alloc] init];
+        [formatterISO8601DateTime setDateFormat:@"yyyy-MM-dd'T'HH:mm:ssZ"];
+        [formatterISO8601DateTime setTimeZone:[NSTimeZone timeZoneWithName:@"UTC"]];
+        formatterDate = [[NSDateFormatter alloc] init];
+        [formatterDate setDateFormat:@"MM/dd/yyyy"];
+        NSDate *DateValue;
+        NSString *planStartDate = [results valueForKey:@"planStartDate"];
+        if (![planStartDate isEqual: [NSNull null]])
+        {
+    
+            planStartDate  = [planStartDate stringByReplacingOccurrencesOfString:@"Z" withString:@"+0000"];
+            DateValue = [formatterISO8601DateTime dateFromString:planStartDate];
+            
+            planStartDate = [formatterDate stringFromDate:DateValue];
+            if (planStartDate== nil) {
+                planStartDate = @"n/a";
+            }
+
+
+        }
+        else
+            planStartDate = @"n/a";
+        
+        user.subscription_planStartDate = planStartDate;
+        
+       
+        NSString *planExpireDate = [results valueForKey:@"planExpireDate"];
+
+        if (![planExpireDate isEqual: [NSNull null]])
+        {
+
+        
+            planExpireDate  = [planExpireDate stringByReplacingOccurrencesOfString:@"Z" withString:@"+0000"];
+        
+            DateValue = [formatterISO8601DateTime dateFromString:planExpireDate];
+        
+            planExpireDate = [formatterDate stringFromDate:DateValue];
+
+            if (planExpireDate == nil) {
+                planExpireDate = @"n/a";
+            }
+        }
+        else
+        {
+            planExpireDate = @"n/a";
+            
+        }
+        user.subscription_PlanExpireDate = planExpireDate;
+
+        user.subscription_HasActivePaidPlan = NO;
+        
+        freeTrialDaysLeft = [results valueForKey:@"freeTrialDaysLeft"];
+        if (([freeTrialDaysLeft intValue] == 0) && hasPaidPlan && !(paidPlanActive)){
+            user.subscription_HasActivePaidPlan = YES;
+            
+            [self.delegate subscriptionExpired];
+        }
+        else
+ 
+            [self.delegate subscriptionValid];
+
+
+    }
+    else
+    {
+ 
+        //let them in and send us back a metric message (something went wrong)
+        [MetricsLogWebService LogException: [NSString stringWithFormat:@"Error from SubscriptionWebService.m. Jason FIX IT!! JSON Parsing Error= %@ resultMessage= %@", error.localizedDescription, resultMessage]];
+        [self.delegate subscriptionError];
+
+    }
+    
+}
+
+
+@end

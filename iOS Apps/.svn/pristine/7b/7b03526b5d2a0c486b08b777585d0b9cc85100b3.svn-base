@@ -1,0 +1,360 @@
+//
+//  CreateEmployerStep2ViewController.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 8/14/15.
+//  Copyright (c) 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "CreateEmployerStep2ViewController.h"
+#import "user.h"
+#import "mixpanel.h"
+#import "CommonLib.h"
+#import "TermsOfServiceViewController.h"
+#import "MetricsLogWebService.h"
+
+
+@interface CreateEmployerStep2ViewController ()
+
+@end
+
+@implementation CreateEmployerStep2ViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    
+    [_backButton setTitleColor:UIColorFromRGB(EZCLOCKER_BLUE_COLOR) forState:UIControlStateNormal];
+    [_createAccountButton setTitleColor:UIColorFromRGB(EZCLOCKER_BLUE_COLOR) forState:UIControlStateNormal];
+    [_termsOfServiceButton setTitleColor:UIColorFromRGB(EZCLOCKER_BLUE_COLOR) forState:UIControlStateNormal];
+
+    _nameTextField.delegate = (id) self;
+    _passwordTextField.delegate = (id) self;
+    [_nameTextField setReturnKeyType:UIReturnKeyDone];
+    [_passwordTextField setReturnKeyType:UIReturnKeyGo];
+    _passwordTextField.tag = 123;
+    
+    UserClass *user = [UserClass getInstance];
+    _emailTextField.text = user.userEmail;
+    _emailTextField.enabled = NO;
+    
+    [self registerForKeyboardNotifications];
+
+}
+- (void)viewDidUnload
+{
+    spinner = nil;
+    [super viewDidUnload];
+    
+}
+
+- (void)viewWillAppear:(BOOL)animated
+{
+    
+    [super viewWillAppear:animated];
+    
+    [_scrollView setScrollEnabled:YES];
+    [_scrollView setContentSize:CGSizeMake(320, 650)];
+    _scrollView.backgroundColor = UIColorFromRGB(DARK_ORANGE_COLOR);
+    
+}
+// Call this method somewhere in your view controller setup code.
+- (void)registerForKeyboardNotifications
+{
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(keyboardWasShown:)
+                                                 name:UIKeyboardDidShowNotification object:nil];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(keyboardWillBeHidden:)
+                                                 name:UIKeyboardWillHideNotification object:nil];
+    
+}
+// Called when the UIKeyboardDidShowNotification is sent.
+- (void)keyboardWasShown:(NSNotification*)aNotification
+{
+    NSDictionary* info = [aNotification userInfo];
+    CGSize kbSize = [[info objectForKey:UIKeyboardFrameBeginUserInfoKey] CGRectValue].size;
+    
+    UIEdgeInsets contentInsets = UIEdgeInsetsMake(0.0, 0.0, kbSize.height, 0.0);
+    _scrollView.contentInset = contentInsets;
+    _scrollView.scrollIndicatorInsets = contentInsets;
+    
+    // If active text field is hidden by keyboard, scroll it so it's visible
+    CGRect aRect = self.view.frame;
+    aRect.size.height -= kbSize.height;
+    //    if (!CGRectContainsPoint(aRect, _passwordTextField.frame.origin) ) {
+    //       [self.scrollView scrollRectToVisible:_passwordTextField.frame animated:YES];
+    //  }
+    
+}
+
+// Called when the UIKeyboardWillHideNotification is sent
+- (void)keyboardWillBeHidden:(NSNotification*)aNotification
+{
+    [_scrollView setContentOffset:CGPointMake(0,0) animated:YES];
+}
+
+
+- (void)didReceiveMemoryWarning {
+    [super didReceiveMemoryWarning];
+    // Dispose of any resources that can be recreated.
+}
+
+/*
+#pragma mark - Navigation
+
+// In a storyboard-based application, you will often want to do a little preparation before navigation
+- (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
+    // Get the new view controller using [segue destinationViewController].
+    // Pass the selected object to the new view controller.
+}
+*/
+
+- (IBAction)doTermsofService:(id)sender {
+    TermsOfServiceViewController *termsOfServiceViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"TermsOfService"];
+    
+    UINavigationController *termsOfServiceNavigationController = [[UINavigationController alloc] initWithRootViewController:termsOfServiceViewController];
+    
+    termsOfServiceViewController.delegate = (id) self;
+    
+    termsOfServiceNavigationController.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+    
+    
+    [self presentViewController:termsOfServiceNavigationController animated:YES completion:nil];
+
+}
+
+- (IBAction)doCreateEmployer:(id)sender {
+    [self hideKeyboard];
+
+    if ([_nameTextField.text length] == 0) {
+        UIAlertView  *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Please enter a Name" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+        
+    }
+    else{
+ //       if ([_emailTextField.text length] == 0) {
+ //           UIAlertView  *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Please enter an Email" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+  //          [alert show];
+            
+  //      }
+  //      else{
+  
+            if ([_passwordTextField.text length] == 0) {
+                UIAlertView  *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Please enter a Password" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+                [alert show];
+                
+            }
+            else{
+  
+                
+//               if ([CommonLib validateEmail:_emailTextField.text])
+//                {
+                    [self startSpinner ];
+                    [self callAddGetAuthWebService];
+//               }
+//                else{
+//                    UIAlertView  *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Please enter a valid email" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+//                    [alert show];
+//                }
+ 
+           }
+    
+    //}
+
+    }
+ 
+}
+
+-(void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response
+{
+    if ([response isKindOfClass: [NSHTTPURLResponse class]]) {
+        int statusCode = [(NSHTTPURLResponse*) response statusCode];
+        if (statusCode == SERVICE_UNAVAILABLE_ERROR){
+            [self stopSpinner];
+            [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+            
+            //error 503 is when tomcat is down
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+        }
+    }
+    
+    
+    data = [[NSMutableData alloc] init];
+}
+
+-(void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)dataIn
+{
+    [data appendData:dataIn];
+}
+
+-(void)connectionDidFinishLoading:(NSURLConnection *)connection
+{
+    [self stopSpinner];
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+
+    UIAlertView *alert;
+    NSError *error = nil;
+    UserClass *user = [UserClass getInstance];
+    //save the user email
+//    user.userEmail = _emailTextField.text;
+    //   user.employerName = _nameTextField.text;
+    //check for error code 8
+    NSString *jsonString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    NSDictionary *results = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
+    NSString *resultMessage = [results valueForKey:@"message"];
+    
+    int errorValue = [[results valueForKey:@"errorCode"] intValue];
+    
+    
+    if (([resultMessage isEqual:[NSNull null]]) || (![resultMessage isEqualToString:@"Success"]))
+    {
+        //if the account already exists show the message that the service sends back else give them a generic message
+        if (errorValue == WEB_SERVICE_ACCOUNT_EXIST_ERROR){
+            alert = [[UIAlertView alloc] initWithTitle:nil message:resultMessage delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        }
+        else{
+            [MetricsLogWebService LogException: [NSString stringWithFormat:@"Error from CreateEmployerAccountViewController JSON Parsing Error= %@ resultMessage= %@", error.localizedDescription, resultMessage]];
+            
+            alert = [[UIAlertView alloc] initWithTitle:nil message:@"Error Creating Account!" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        }
+        [alert show];
+    }
+    else {
+        
+        NSArray *authTokens = [results valueForKey:@"activeAuthTokens"];
+        //pick the first one need to change later
+        NSDictionary *authToken = [authTokens objectAtIndex:0];
+        user.authToken = [authToken valueForKey:@"authToken"];
+        user.employerID = [authToken valueForKey:@"employerId"];
+        user.userType = @"employer";
+        
+        //save data
+        
+        [[NSUserDefaults standardUserDefaults] setInteger:[user.employerID intValue] forKey:@"employerId"];
+        [[NSUserDefaults standardUserDefaults] setValue:user.userType forKey:@"userType"];
+        
+        [[NSUserDefaults standardUserDefaults] setValue:user.employerName forKey:@"name"];
+        
+        [[NSUserDefaults standardUserDefaults] setObject:user.authToken forKey:@"authToken"];
+        [[NSUserDefaults standardUserDefaults] setObject:user.userEmail forKey:@"userEmail"];
+        [[NSUserDefaults standardUserDefaults] synchronize]; //write out the data
+        
+        
+        //log to mixpanel if we are production
+        if ([CommonLib isProduction])
+        {
+            Mixpanel *mixpanel = [Mixpanel sharedInstance];
+            
+            [mixpanel track:@"Registered" properties:@{ @"email": user.userEmail}];
+        }
+        
+        [self.delegate CreateEmployerAccountStep2DidFinish:self];
+        
+    }
+    
+}
+
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error
+{
+    // release the connection, and the data object
+    // receivedData is declared as a method instance elsewhere
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    [self stopSpinner];
+    
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+    
+    [alert show];
+    
+    connection = nil;
+    data = nil;
+}
+
+
+-(void) startSpinner{
+    if (!spinner)
+    {
+        spinner = [[MBProgressHUD alloc] initWithView:self.view];
+    }
+    spinner.labelText = @"Creating Account..";
+    [self.view addSubview:spinner];
+    [spinner show:YES];
+}
+
+-(void) stopSpinner{
+    [spinner hide:YES];
+}
+
+-(void) hideKeyboard{
+    [_nameTextField resignFirstResponder];
+//    [_emailTextField resignFirstResponder];
+    [_passwordTextField resignFirstResponder];
+}
+
+-(void)removeKeyboard{
+    [_nameTextField resignFirstResponder];
+ //   [_emailTextField resignFirstResponder];
+    [_passwordTextField resignFirstResponder];
+}
+
+//call getUserAccount to get the type if they are employer or employee and also to get the id
+-(void) callAddGetAuthWebService{
+    
+    UserClass *user = [UserClass getInstance];
+    
+    UIAlertView *alert;
+    NSString *httpPostString;
+    NSString *request_body;
+    NSString *userName = _nameTextField.text;
+    NSString *userEmail = user.userEmail;
+    NSString *userPassword = _passwordTextField.text;
+    
+    httpPostString = [NSString stringWithFormat:@"%@employer/addGetAuth", SERVER_URL];
+    
+    request_body = [NSString
+                    stringWithFormat:@"developerToken=%@&employerName=%@&emailAddress=%@&password=%@",
+                    [DEV_TOKEN        stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [userName     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [userEmail     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [userPassword     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding                    ]];
+    
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    //set HTTP Method
+    [urlRequest setHTTPMethod:@"POST"];
+    
+    //set request body into HTTPBody.
+    [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection  = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    if (connection)
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = YES;
+    else {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Connection to the server failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+        
+    }
+    
+}
+- (BOOL)textFieldShouldReturn:(UITextField *)theTextField {
+    if (theTextField.tag == 123)
+        [self doCreateEmployer:self];
+    [self removeKeyboard];
+    return YES;
+    
+}
+
+- (void)termsOfServiceControllerDidFinishViewing:(TermsOfServiceViewController *)controller
+{
+    
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+
+
+- (IBAction)doBackAction:(id)sender {
+    [self.delegate createViewControllerFromStep2WasSelected:self];
+}
+@end

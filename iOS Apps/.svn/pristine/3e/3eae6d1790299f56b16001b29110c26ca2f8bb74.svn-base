@@ -1,0 +1,99 @@
+//
+//  ClockWebServices.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 11/5/15.
+//  Copyright © 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <Foundation/Foundation.h>
+#import "ClockWebServices.h"
+#import "CommonLib.h"
+
+#import <QuartzCore/QuartzCore.h>
+
+#import "user.h"
+
+#import "ECSlidingViewController.h"
+
+#import "MenuViewController.h"
+
+//#import "Mixpanel.h"
+
+#import "CommonLib.h"
+#import "MetricsLogWebService.h"
+#import "TimeEntry+Extensions.h"
+#import "NSString+Extensions.h"
+#import "NSDate+Extensions.h"
+#import "debugdefines.h"
+#import "DataManager.h"
+#import "SharedUICode.h"
+#import "NSDictionary+Extensions.h"
+
+@implementation ClockWebServices
+
+- (void) callTCSWebService:(ClockMode)clockMode timeEntryObjectID:(NSManagedObjectID*)timeEntryObjectID dateTime:(NSDate*) currentDateTime employeeID: (NSNumber*) selEmployeeID locOverride:(bool) bOverrideLocationCheck{
+#ifndef PERSONAL_VERSION
+    CLLocation *loc = [LocationManager defaultLocationManager].lastKnownLocation;
+#else
+    CLLocation* loc = nil;
+#endif
+    DataManager* manager = [DataManager sharedManager];
+    [manager clockInOrClockOut:clockMode timeEntryObjectID:timeEntryObjectID currentDate:currentDateTime location:loc source:kIPHONE locOverride:bOverrideLocationCheck withCompletion:^(NSInteger errorCode, NSString * _Nullable resultMessage, NSDictionary * _Nullable results, NSError * _Nullable error) {
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+        switch (errorCode) {
+            case DATAMANAGER_BUSY: {
+                [SharedUICode displayServerIsBusy];
+                [self.delegate clockServiceCallDidFinish:self timeEntryRec:nil ErrorCode:DATAMANAGER_BUSY ClockMode:clockMode];
+                return;
+            }
+            case SERVICE_UNAVAILABLE_ERROR: {
+                [SharedUICode displayServiceUnavailableErrorWithMsg:@"NOTE: You can continue to clock in/clock out and we will save to the server later."];
+                
+                [self.delegate clockServiceCallDidFinish:self timeEntryRec:results ErrorCode:SERVICE_UNAVAILABLE_ERROR ClockMode:clockMode];
+                return;
+            }
+            case SERVICE_ERRORCODE_ALREADY_CLOCKED_IN: {
+                [SharedUICode messageBox:@"" message:@"You are already clocked in.  Please clock out." withCompletion:^{
+                    [self.delegate clockServiceCallDidFinish:self timeEntryRec:results ErrorCode:SERVICE_ERRORCODE_ALREADY_CLOCKED_IN ClockMode:clockMode];
+                }];
+                return;
+            }
+            case SERVICE_ERRORCODE_ALREADY_CLOCKED_OUT: {
+                [SharedUICode messageBox:@"" message:@"You are already clocked out." withCompletion:^{
+                    [self.delegate clockServiceCallDidFinish:self timeEntryRec:results ErrorCode:SERVICE_ERRORCODE_ALREADY_CLOCKED_OUT ClockMode:clockMode];
+                }];
+                return;
+            }
+            case SERVICE_ERRORCODE_SUCCESSFUL: {
+                NSDictionary *timeEntryRec = [results valueForKey:ktimeEntryKey];
+                if ([NSDictionary isNilOrNull:timeEntryRec]) {
+                    timeEntryRec = nil;
+                    //Should we set this to nil?
+                    //user.activeTimeEntryId = nil;
+                } else {
+                    NSNumber *timeEntryId = [timeEntryRec valueForKey:kidKey];
+                    UserClass *user = [UserClass getInstance];
+                    user.activeTimeEntryId = timeEntryId;
+                }
+                [self.delegate clockServiceCallDidFinish:self timeEntryRec:timeEntryRec ErrorCode:SERVICE_ERRORCODE_SUCCESSFUL ClockMode:clockMode];
+                return;
+            }
+            default: { // If no resultMessage then we will display please try again
+                if ([NSString isNilOrEmpty:resultMessage]) {
+                    [SharedUICode messageBox:nil message:@"The App was not able to connect to the ezClocker cloud.  Please try again." withCompletion:^{
+                        [self.delegate clockServiceCallDidFinish:self timeEntryRec:nil ErrorCode:(int)errorCode ClockMode:clockMode];
+                    }];
+                } else { // otherwise display the message from the server
+                    [SharedUICode checkResultsMessageAndDisplayError:resultMessage error:error];
+                    [self.delegate clockServiceCallDidFinish:self timeEntryRec:results ErrorCode:(int)errorCode ClockMode:clockMode];
+                }
+                break;
+            }
+        }
+        return;
+    }];
+    
+}
+
+@end

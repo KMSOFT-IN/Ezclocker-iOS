@@ -1,0 +1,46 @@
+//
+//  AddTimeEntryViewController.h
+//  TCS Mobile
+//
+//  Created by Raya Khashab on 11/10/12.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import "MBProgressHUD.h"
+@class AddTimeEntryViewController;
+
+@protocol addTimeEntryViewControllerDelegate
+- (void)addTimeEntryViewControllerDidFinish:(AddTimeEntryViewController *)controller;
+@end
+
+@interface AddTimeEntryViewController : UIViewController<NSURLConnectionDataDelegate, UITableViewDelegate>{
+    NSDate *clockInPickerDate;
+    UIDatePicker *pickDate;
+    NSString *clockInTime;
+    NSString *clockOutTime;
+    NSDateFormatter *formatterDateTime, *formatterDateTime12, *formatterISO8601DateTime;
+    NSMutableData *data;
+    int TextFieldMode;
+    UIDatePicker *theDatePicker;
+    UIToolbar* pickerToolbar;
+    UIView* pickerViewDate;
+    
+}
+@property (weak, nonatomic) IBOutlet UIScrollView *scrollView;
+- (IBAction)doClockInBtnClick:(id)sender;
+@property (weak, nonatomic) IBOutlet UIButton *clockInButton;
+@property (strong, nonatomic) IBOutlet UIView *mainView;
+@property (weak, nonatomic) IBOutlet UIButton *clockOutButton;
+- (IBAction)clockOutBtnClick:(id)sender;
+
+@property (weak, nonatomic) IBOutlet UILabel *clockInLabel;
+@property (weak, nonatomic) IBOutlet UILabel *clockOutLabel;
+@property (strong, nonatomic) MBProgressHUD *spinner;
+@property (nonatomic, retain) NSNumber *employeeID;
+@property (assign, nonatomic) IBOutlet id <addTimeEntryViewControllerDelegate> delegate;
+- (IBAction)doTimeEntrySave:(id)sender;
+- (IBAction)doTimeEntryCancel:(id)sender;
+
+
+@end

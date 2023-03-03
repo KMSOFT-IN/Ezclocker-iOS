@@ -1,0 +1,89 @@
+//
+//  AddPersonInitialViewController.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 11/9/15.
+//  Copyright © 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "AddPersonInitialViewController.h"
+#import "AddEmployeeViewController.h"
+#import "ECSlidingViewController.h"
+#import "MenuViewController.h"
+
+
+@interface AddPersonInitialViewController ()
+
+@end
+
+@implementation AddPersonInitialViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    // Do any additional setup after loading the view.
+}
+
+- (void)didReceiveMemoryWarning {
+    [super didReceiveMemoryWarning];
+    // Dispose of any resources that can be recreated.
+}
+
+- (void)viewWillAppear:(BOOL)animated
+{
+    [super viewWillAppear: animated];
+    if (![self.slidingViewController.underLeftViewController isKindOfClass:[MenuViewController class]]) {
+        self.slidingViewController.underLeftViewController  = [self.storyboard instantiateViewControllerWithIdentifier:@"Menu"];
+    }
+    
+    
+}
+- (id)initWithCoder:(NSCoder *)aDecoder
+{
+    self = [super initWithCoder:aDecoder];
+    if (self){
+        [[UINavigationBar appearance] setTitleTextAttributes:@{NSForegroundColorAttributeName : [UIColor whiteColor]}];
+        self.title = NSLocalizedString(@"Employees", @"Employees");
+    }
+    
+    return self;
+}
+
+
+/*
+#pragma mark - Navigation
+
+// In a storyboard-based application, you will often want to do a little preparation before navigation
+- (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
+    // Get the new view controller using [segue destinationViewController].
+    // Pass the selected object to the new view controller.
+}
+*/
+
+
+- (IBAction)revealMenu:(id)sender {
+    [self.slidingViewController anchorTopViewTo:ECRight];
+
+}
+
+- (IBAction)doAddPerson:(UIButton *)sender {
+    AddEmployeeViewController *controller = [self.storyboard instantiateViewControllerWithIdentifier:@"AddEmployee"];
+    
+    UINavigationController *addEmployeeNavigationController = [[UINavigationController alloc] initWithRootViewController:controller];
+    
+    
+    controller.delegate = (id) self;
+    controller.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+    
+    [self presentViewController:addEmployeeNavigationController animated:YES completion:nil];
+
+}
+- (void)addEmployeeViewControllerDidFinish:(UIViewController *)controller CancelWasSelected:(bool)cancelWasSelected
+{
+    [self dismissViewControllerAnimated:YES completion:nil];
+    //call the initial view controller so it can switch the views to using employeeList
+    [self.delegate newEmployeeAdded:self];
+
+}
+
+
+@end

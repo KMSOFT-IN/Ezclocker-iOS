@@ -1,0 +1,326 @@
+//
+//  EmployerSignUpViewController.m
+//  TCS Mobile
+//
+//  Created by Raya Khashab on 1/13/13.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "EmployerSignUpViewController.h"
+#import "AppDelegate.h"
+#import "user.h"
+#import "CommonLib.h"
+
+@interface EmployerSignUpViewController ()
+
+@end
+
+@implementation EmployerSignUpViewController
+@synthesize nameLabel;
+@synthesize emailLabel;
+@synthesize passwordLabel;
+@synthesize mainViewController;
+@synthesize nameTextField;
+@synthesize emailTextField;
+@synthesize mainScrollView;
+@synthesize passwordTextField;
+
+
+-(id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
+{
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    if (self){
+        self.title = NSLocalizedString(@"Sign Up", @"Sign Up");
+    }
+    return self;
+}
+
+- (void)viewWillAppear:(BOOL)animated
+{
+	[super viewWillAppear: animated];
+    //this will help us figure out which service to call
+    EmployerAdded = NO;
+    mainScrollView.scrollEnabled = YES;
+    // set the content size so it can be scrollable
+	[mainScrollView setContentSize:CGSizeMake([mainScrollView bounds].size.width, [mainScrollView bounds].size.height+50)];
+    if (UIDeviceOrientationIsLandscape(self.interfaceOrientation))
+        [self setLabelsForLandscapeOrientation];
+
+
+}
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    // Do any additional setup after loading the view from its nib.
+    originalCenter = self.view.center;
+    UIColor *orangeLightOp = UIColorFromRGB(0xdcdcdc);
+    mainViewController.backgroundColor = orangeLightOp;
+    
+
+
+}
+
+- (void)viewDidUnload
+{
+    [self setNameTextField:nil];
+    [self setEmailTextField:nil];
+    [self setPasswordTextField:nil];
+    [self setMainViewController:nil];
+    [self setMainScrollView:nil];
+    [self setNameLabel:nil];
+    [self setEmailLabel:nil];
+    [self setPasswordLabel:nil];
+    [super viewDidUnload];
+    // Release any retained subviews of the main view.
+    // e.g. self.myOutlet = nil;
+}
+
+- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
+{
+    if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPhone) {
+        return (interfaceOrientation != UIInterfaceOrientationPortraitUpsideDown);
+    } else {
+        return YES;
+    }
+}
+
+- (void)willAnimateRotationToInterfaceOrientation:
+    (UIInterfaceOrientation)toInterfaceOrientation duration:(NSTimeInterval)duration{
+    [self setLabelsOrientation];
+}
+-(void) setLabelsForLandscapeOrientation{
+    nameLabel.frame = CGRectMake(340, nameLabel.frame.origin.y, nameLabel.frame.size.width, nameLabel.frame.size.height);
+    passwordLabel.frame = CGRectMake(340, passwordLabel.frame.origin.y, passwordLabel.frame.size.width, passwordLabel.frame.size.height);
+    emailLabel.frame = CGRectMake(340, emailLabel.frame.origin.y, emailLabel.frame.size.width, emailLabel.frame.size.height);
+    
+}
+
+-(void) setLabelsOrientation{
+//    UIDeviceOrientation orientation = [[UIDevice currentDevice] orientation];
+    if (UIDeviceOrientationIsLandscape(self.interfaceOrientation))        [self setLabelsForLandscapeOrientation ];
+    else
+    {
+        nameLabel.frame = CGRectMake(200, nameLabel.frame.origin.y, nameLabel.frame.size.width, nameLabel.frame.size.height);
+        passwordLabel.frame = CGRectMake(200, passwordLabel.frame.origin.y, passwordLabel.frame.size.width, passwordLabel.frame.size.height);
+        emailLabel.frame = CGRectMake(200, emailLabel.frame.origin.y, emailLabel.frame.size.width, emailLabel.frame.size.height);
+    }
+
+}
+- (IBAction)nameEditingDidBegin:(id)sender {
+    if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPhone) 
+        self.view.center = CGPointMake(originalCenter.x, originalCenter.y - 190);
+}
+
+- (IBAction)emailEditingDidBegin:(id)sender {
+    if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPhone) 
+        self.view.center = CGPointMake(originalCenter.x, originalCenter.y - 200);
+    
+}
+- (IBAction)passwordEditingDidBegin:(id)sender {
+    if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPhone) 
+        self.view.center = CGPointMake(originalCenter.x, originalCenter.y - 200);
+}
+
+
+- (IBAction)nameEditingDidEnd:(id)sender {
+   // self.view.center = originalCenter;
+}
+
+-(IBAction)backgroundTouched:(id)sender
+{
+    [nameTextField resignFirstResponder];
+    [emailTextField resignFirstResponder];
+    [passwordTextField resignFirstResponder];
+    if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPhone) 
+        self.view.center = CGPointMake(originalCenter.x, originalCenter.y - 25);
+} 
+
+-(void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response
+{
+    if ([response isKindOfClass: [NSHTTPURLResponse class]]) {
+        NSInteger statusCode = [(NSHTTPURLResponse*) response statusCode];
+        if (statusCode == SERVICE_UNAVAILABLE_ERROR){
+            [self stopSpinner];
+            [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+            
+            //error 503 is when tomcat is down
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+        }
+    }
+    
+    
+    data = [[NSMutableData alloc] init];
+}
+-(void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)dataIn
+{
+    [data appendData:dataIn];
+}
+
+-(void)connectionDidFinishLoading:(NSURLConnection *)connection
+{
+    [self stopSpinner];
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    
+    UIAlertView *alert;
+    NSError *error = nil;
+    NSDictionary *results = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
+    NSString *resultMessage = [results valueForKey:@"message"];
+    if (![resultMessage isEqualToString:@"Success"])
+    {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Failure to Add" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        //[alert show];
+    }
+/*    else {
+        UserClass *user = [UserClass getInstance];
+        //figure out did we call the Add Employer service call or get Auth Token call
+        if (!EmployerAdded){
+            EmployerAdded = YES;
+            NSDictionary *curEmployer = [results valueForKey:@"employer"];
+            user.employerID     = [curEmployer valueForKey:@"id"];
+            user.userID  = [curEmployer valueForKey:@"id"];
+            NSString *authToken   = [curEmployer valueForKey:@"authToken"];
+            alert = [[UIAlertView alloc] initWithTitle:nil message:[user.employerID stringValue] delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+            
+                //save data
+                [[NSUserDefaults standardUserDefaults] setInteger:[user.userID intValue] forKey:@"employeeId"];
+                [[NSUserDefaults standardUserDefaults] setObject:authToken forKey:@"authToken"];
+                [[NSUserDefaults standardUserDefaults] synchronize]; //write out the data
+            //call the get AuthToken service
+
+//            [self callLoginWebService: self.emailTextField.text Password: self.passwordTextField.text EmployerID: [user.employerID stringValue]];
+        }*/
+        else {
+            UserClass *user = [UserClass getInstance];
+            NSArray *AuthTokens = [results valueForKey:@"activeAuthTokens"];
+            //if empty array of tokens then the login was incorrect like wrong password
+            if ([AuthTokens count] == 0)
+            {
+                [self showLoginFailureError];
+            }
+
+            for (NSDictionary *curAuthToken in AuthTokens){
+                
+                NSString *authToken   = [curAuthToken valueForKey:@"authToken"];
+                user.authToken  = authToken;
+                user.employerID     = [curAuthToken valueForKey:@"employerId"];
+                
+                [[NSUserDefaults standardUserDefaults] setObject:authToken forKey:@"authToken"];
+                [[NSUserDefaults standardUserDefaults] setInteger:[user.employerID intValue] forKey:@"employerId"];
+                [[NSUserDefaults standardUserDefaults] synchronize]; //write out the data
+            }
+//            AppDelegate *mainDelegate = (AppDelegate*)[[UIApplication sharedApplication]delegate];
+//            [mainDelegate RegisterEmployerDidPass];
+
+        }
+   // }
+    
+}
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error
+{
+    // release the connection, and the data object
+    // receivedData is declared as a method instance elsewhere
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    [self stopSpinner];
+    
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+    
+    [alert show];
+    
+    connection = nil;
+    data = nil;
+}
+
+
+-(void) showLoginFailureError{
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Login is incorrect!. Please try again." delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+    [alert show];   
+}
+
+
+
+-(void) callRegisterWebService: (NSString*) userName UserEmail: (NSString *) userEmail Password: (NSString *) userPassword{
+    
+    UIAlertView *alert;
+    NSString *httpPostString; 
+    NSString *request_body;
+ 
+//    httpPostString = [NSString stringWithFormat:@"%@employer/add", SERVER_URL];
+    httpPostString = [NSString stringWithFormat:@"%@employer/addGetAuth", SERVER_URL];
+    
+    request_body = [NSString 
+                    stringWithFormat:@"developerToken=%@&employerName=%@&emailAddress=%@&password=%@",
+                    [DEV_TOKEN        stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [userName     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [userEmail     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [userPassword     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding                    ]];   
+    
+    
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    
+    //set HTTP Method
+    [urlRequest setHTTPMethod:@"POST"];
+    [urlRequest setValue:@"application/json;charset=UTF-8" forHTTPHeaderField:@"Accept"];
+    
+    //set request body into HTTPBody.
+    [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    if (connection)
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = YES;
+    else {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Connection to the server failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+        
+    }
+    
+    
+}
+
+-(void) callLoginWebService: (NSString*) userName Password: (NSString *) userPassword EmployerID:(NSString *) employerID {
+    
+    UIAlertView *alert;
+    NSString *httpPostString;
+    NSString *request_body;
+    
+    httpPostString = [NSString stringWithFormat:@"%@account/getAuthToken/%@", SERVER_URL, employerID];
+    
+    request_body = [NSString 
+                    stringWithFormat:@"developerToken=%@",
+                    [DEV_TOKEN        stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding
+]];   
+    
+    
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+        
+    //set HTTP Method
+    [urlRequest setHTTPMethod:@"POST"];
+    [urlRequest setValue:@"application/json;charset=UTF-8" forHTTPHeaderField:@"Accept"];
+    
+    //set request body into HTTPBody.
+    [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    if (connection)
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = YES;
+    else {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Connection to the server failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+        
+    }
+    
+    
+}
+
+
+- (IBAction)doRegister:(id)sender {
+    [self startSpinnerWithMessage:@"Authenticating..."];
+
+    [self callRegisterWebService:self.nameTextField.text UserEmail:self.emailTextField.text Password: self.passwordTextField.text];
+}
+@end

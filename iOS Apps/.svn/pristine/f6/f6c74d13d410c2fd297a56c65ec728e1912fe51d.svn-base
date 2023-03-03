@@ -1,0 +1,45 @@
+//
+//  ScheduleDetailViewController.h
+//  ezClocker
+//
+//  Created by Raya Khashab on 1/19/15.
+//  Copyright (c) 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import "MBProgressHUD.h"
+@class ScheduleDetailViewController;
+
+@protocol scheduleDetailViewControllerDelegate
+- (void)scheduleDetailViewControllerDidFinish:(ScheduleDetailViewController *)controller;
+@end
+
+@interface ScheduleDetailViewController : UIViewController<NSURLConnectionDataDelegate, UITextFieldDelegate, UIPickerViewDelegate, UIPickerViewDataSource>{
+    UIDatePicker *theDatePicker;
+    UIToolbar* pickerToolbar;
+    UIView* pickerViewDate;
+    UIPickerView *pickerViewEmployeeName;
+    NSMutableData *data;
+    int TextFieldMode;
+    MBProgressHUD *spinner;
+    NSMutableArray *employeeList;
+    NSDateFormatter *formatterISO8601DateTime, *formatterTime12, *formatterDate;
+    
+}
+
+@property (weak, nonatomic) IBOutlet UITextField *employeeNameTextField;
+
+@property (weak, nonatomic) IBOutlet UITextField *startTimeTextField;
+@property (weak, nonatomic) IBOutlet UITextField *endTimeTextField;
+- (IBAction)doStartTimeTouchDown:(id)sender;
+- (IBAction)doEndTimeTouchDown:(id)sender;
+- (IBAction)doScheduleDelete:(id)sender;
+@property (weak, nonatomic) IBOutlet UITableViewCell *DeleteTabelCell;
+- (IBAction)doEmployeeNameTouchDown:(id)sender;
+@property (assign, nonatomic) IBOutlet id <scheduleDetailViewControllerDelegate> delegate;
+- (IBAction)doScheduleSave:(id)sender;
+- (IBAction)doScheduleCancel:(id)sender;
+@property (weak, nonatomic) IBOutlet UIScrollView *scrollView;
+@property (strong, nonatomic) NSDictionary *selectedSchedule;
+
+@end

@@ -1,0 +1,19 @@
+//
+//  ViewAccountViewController.h
+//  ezClocker
+//
+//  Created by Raya Khashab on 2/20/14.
+//  Copyright (c) 2014 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+
+@interface ViewAccountViewController : UIViewController
+@property (weak, nonatomic) IBOutlet UIBarButtonItem *editBarBtn;
+@property (strong, nonatomic) IBOutlet UIView *mainView;
+@property (weak, nonatomic) IBOutlet UILabel *nameLabel;
+- (IBAction)revealMenu:(id)sender;
+@property (weak, nonatomic) IBOutlet UILabel *emailLabel;
+- (IBAction)updateAccount:(id)sender;
+
+@end

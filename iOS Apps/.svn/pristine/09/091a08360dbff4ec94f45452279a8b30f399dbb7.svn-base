@@ -1,0 +1,416 @@
+//
+//  MenuViewController.m
+//  ECSlidingViewController
+//
+//  Created by Michael Enriquez on 1/23/12.
+//  Copyright (c) 2012 EdgeCase. All rights reserved.
+//
+
+#import "MenuViewController.h"
+#import "user.h"
+#import "LoginViewController.h"
+#import "CommonLib.h"
+#import "EmailFeedbackViewController.h"
+#import "LoginPersonalViewController.h"
+
+@interface MenuViewController()
+@property (nonatomic, strong) NSArray *menuItems;
+@end
+
+@implementation MenuViewController
+@synthesize menuItems;
+@synthesize NameLabel;
+@synthesize MenuTableView;
+
+- (void)awakeFromNib
+{
+    
+    
+}
+
+- (id)initWithCoder:(NSCoder *)aDecoder
+{
+    self = [super initWithCoder:aDecoder];
+    return self;
+}
+
+- (void)viewDidLoad
+{
+  [super viewDidLoad];
+  
+  [self.slidingViewController setAnchorRightRevealAmount:250.0f];
+  self.slidingViewController.underLeftWidthLayout = ECFullWidth;
+}
+
+-(void) viewWillAppear:(BOOL)animated{
+    UserClass *user = [UserClass getInstance];
+#ifdef PERSONAL_VERSION
+    self.menuItems = [NSArray arrayWithObjects:@"Home", @"Send Us Feedback", @"Account", nil];
+    
+//    self.menuItems = [NSArray arrayWithObjects:@"Home", @"Reminders", @"Send Us Feedback", @"Account", nil];
+#else
+//    UserClass *user = [UserClass getInstance];
+    if ([user.userType isEqualToString:@"employer"])
+        self.menuItems = [NSArray arrayWithObjects:@"Home", @"Send Us Feedback", @"Subscription", @"Schedule", @"Sign Out", nil];
+ //   self.menuItems = [NSArray arrayWithObjects:@"Home", @"Send Us Feedback", @"Subscription", @"Sign Out", nil];
+    else
+        self.menuItems = [NSArray arrayWithObjects:@"Home", @"Send Us Feedback", @"Sign Out", nil];
+#endif
+
+    if ([user.employerName length] != 0)
+    {
+        NameLabel.text = [[NSString alloc] initWithString:user.employerName];
+//        NameLabel.minimumFontSize = 16.0;
+        NameLabel.adjustsFontSizeToFitWidth=YES;
+//        NameLabel.font = [UIFont fontWithName:@"Arial Rounded MT Bold" size:(16.0)];
+
+    }
+    UIColor *orangeLightOp = UIColorFromRGB(GRAY_BACKGROUND_DARK_COLOR);
+    self.view.backgroundColor = orangeLightOp;
+    MenuTableView.backgroundColor = UIColorFromRGB(GRAY_BACKGROUND_DARK_COLOR);
+  //  MenuTableView.separatorColor = [UIColor whiteColor];
+
+    [MenuTableView reloadData];
+    
+
+}
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+{
+    return 1;
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    return @"Actions";
+    
+}
+
+//because we are overridng the color of the section header we'll also need to set the Header text
+//because by using this method it will override whatever is in titleForHeaderInSection method
+-(UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section
+{
+    UIView *tempView=[[UIView alloc]initWithFrame:CGRectMake(0,200,300,244)];
+    tempView.backgroundColor = UIColorFromRGB(BLUE_TOOLBAR_COLOR);
+    UILabel *tempLabel=[[UILabel alloc]initWithFrame:CGRectMake(15,0,300,22)];
+    tempLabel.backgroundColor=[UIColor clearColor];
+    tempLabel.textColor = [UIColor whiteColor];
+    tempLabel.font = [UIFont fontWithName:@"Helvetica" size:16.0f];
+    tempLabel.font = [UIFont boldSystemFontOfSize:16.0f];
+    tempLabel.text =  @"Operations";
+    
+    
+    [tempView addSubview:tempLabel];
+    
+    return tempView;
+}
+
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)sectionIndex
+{
+  return self.menuItems.count;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+  UserClass *user = [UserClass getInstance];
+  NSString *cellIdentifier = @"MenuItemCell";
+  UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellIdentifier];
+  if (cell == nil) {
+    cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:cellIdentifier];
+  }
+  
+
+  cell.textLabel.font = [UIFont systemFontOfSize:14.0];
+  cell.backgroundColor = UIColorFromRGB(GRAY_BACKGROUND_DARK_COLOR);
+
+  cell.textLabel.text = [self.menuItems objectAtIndex:indexPath.row];
+    if (indexPath.row == 0){
+          cell.imageView.image = [UIImage imageNamed:@"home"];
+        
+    }
+#ifdef PERSONAL_VERSION
+/*    else if (indexPath.row == 1)
+        cell.imageView.image = [UIImage imageNamed:@"stopwatch"];
+    else if (indexPath.row == 2)
+        cell.imageView.image = [UIImage imageNamed:@"mail"];
+    else
+        cell.imageView.image = [UIImage imageNamed:@"lock"];
+ */
+    
+    else if (indexPath.row == 1)
+        cell.imageView.image = [UIImage imageNamed:@"mail"];
+    else
+        cell.imageView.image = [UIImage imageNamed:@"lock"];
+#else
+    else if (indexPath.row == 1)
+        cell.imageView.image = [UIImage imageNamed:@"mail"];
+    //we only want to show the subscription/shopping_cart for employers
+    else if ((indexPath.row == 2) && [user.userType isEqualToString:@"employer"])
+    {
+        cell.imageView.image = [UIImage imageNamed:@"shopping_cart"];
+    }
+    else if ((indexPath.row == 3) && [user.userType isEqualToString:@"employer"])
+    {
+        cell.imageView.image = [UIImage imageNamed:@"calendar"];
+    }
+    else
+        cell.imageView.image = [UIImage imageNamed:@"lock"];
+
+#endif
+    
+
+  return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
+{
+   // NSString *identifier = [NSString stringWithFormat:@"%@Top", [self.menuItems objectAtIndex:indexPath.row]];
+    UITableViewCell *cell = (UITableViewCell *)[tableView cellForRowAtIndexPath:indexPath];
+    cell.contentView.backgroundColor = [UIColor whiteColor];
+
+    NSString *identifier = [self.menuItems objectAtIndex:indexPath.row];
+    UIViewController *newTopViewController;
+    if ([identifier isEqualToString:@"Send Us Feedback"])
+    {
+        EmailFeedbackViewController *emailFeedbackController = [self.storyboard instantiateViewControllerWithIdentifier:@"EmailFeedback"];
+        UINavigationController *navFeedback = [[UINavigationController alloc] initWithRootViewController:emailFeedbackController];
+        newTopViewController = navFeedback;
+
+//        newTopViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"NavigationFeedback"];
+    }
+    else
+    {
+        if ([identifier isEqualToString:@"Account"])
+        {
+#ifdef PERSONAL_VERSION
+            UserClass *user = [UserClass getInstance];
+            //figure out if the user already has an account or not
+            if (![user.hasAccount isEqualToString:@"YES"]){
+                CreatePersonalAccountViewController *createAccountController = [self.storyboard instantiateViewControllerWithIdentifier:@"CreateAccount"];
+            
+            
+                createAccountController.delegate = (id) self;
+
+                UINavigationController *navCreateAccount = [[UINavigationController alloc] initWithRootViewController:createAccountController];
+
+            
+                newTopViewController = navCreateAccount;
+            }
+            else{
+                newTopViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"NavigationViewAccount"];
+                
+            }
+#endif
+
+         }
+        else if ([identifier isEqualToString:@"Reminders"])
+            {
+#ifdef PERSONAL_VERSION
+                    newTopViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"navReminders"];
+                    
+#endif
+                
+            }
+
+        else{
+            if ([identifier isEqualToString:@"Sign Out"])
+            {
+            //delete all saved information
+            NSString *appDomain = [[NSBundle mainBundle] bundleIdentifier];
+            [[NSUserDefaults standardUserDefaults] removePersistentDomainForName:appDomain];
+            //clear out the singelton
+            [UserClass releaseInstance];
+            
+            LoginViewController *loginController = [self.storyboard instantiateViewControllerWithIdentifier:@"Login"];
+            
+            //  LoginViewController *loginController = [[LoginViewController alloc] initWithNibName:@"LoginViewController" bundle:nil];
+            
+            loginController.delegate = (id) self;
+            newTopViewController = loginController;
+
+            }
+            else {
+                
+                if ([identifier isEqualToString:@"Subscription"])
+                {
+                    newTopViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"NavSubscriptionPlans"];
+                }
+                else
+
+                {
+                    if ([identifier isEqualToString:@"Schedule"])
+                    {
+                        newTopViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"NavSchedule"];
+                    }
+                    else{
+                        UserClass *user = [UserClass getInstance];
+                        if ([user.userType isEqualToString:@"employer"])
+                            newTopViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"NavigationTop"];
+                        else
+                            newTopViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"FirstTop"];
+                    }
+
+                }
+            }
+        }
+      
+    }
+    
+    [self.slidingViewController anchorTopViewOffScreenTo:ECRight animations:nil onComplete:^{
+    CGRect frame = self.slidingViewController.topViewController.view.frame;
+    self.slidingViewController.topViewController = newTopViewController;
+    self.slidingViewController.topViewController.view.frame = frame;
+    [self.slidingViewController resetTopView];
+  
+    }];
+    
+}
+
+
+- (void)createAccountViewControllerDidFinish:(CreatePersonalAccountViewController *)controller
+{
+    UIViewController *newTopViewController;
+    UIStoryboard *storyboard;
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+    } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+    }
+    newTopViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"NavigationViewAccount"];
+    
+    [self.slidingViewController anchorTopViewOffScreenTo:ECRight animations:nil onComplete:^{
+        CGRect frame = self.slidingViewController.topViewController.view.frame;
+        self.slidingViewController.topViewController = newTopViewController;
+        self.slidingViewController.topViewController.view.frame = frame;
+        [self.slidingViewController resetTopView];
+    }];
+}
+- (void)loginPersonalViewControllerDidFinished:(LoginPersonalViewController *)controller
+{
+    UIViewController *newTopViewController;
+    UIStoryboard *storyboard;
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+    } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+    }
+    newTopViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"NavigationViewAccount"];
+    
+    [self.slidingViewController anchorTopViewOffScreenTo:ECRight animations:nil onComplete:^{
+        CGRect frame = self.slidingViewController.topViewController.view.frame;
+        self.slidingViewController.topViewController = newTopViewController;
+        self.slidingViewController.topViewController.view.frame = frame;
+        [self.slidingViewController resetTopView];
+    }];
+}
+
+
+- (void)loginViewControllerDidFinish:(LoginViewController *)controller
+{
+    UserClass *user = [UserClass getInstance];
+    UIViewController *newTopViewController;
+    UIStoryboard *storyboard;
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+    } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+    }
+    if ([user.userType isEqualToString:@"employer"])
+        newTopViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"NavigationTop"];
+    else
+        newTopViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"FirstTop"];
+    
+    //    newTopViewController = [storyboard instantiateViewControllerWithIdentifier:@"NavigationTop"];
+    [self.slidingViewController anchorTopViewOffScreenTo:ECRight animations:nil onComplete:^{
+        CGRect frame = self.slidingViewController.topViewController.view.frame;
+        self.slidingViewController.topViewController = newTopViewController;
+        self.slidingViewController.topViewController.view.frame = frame;
+        [self.slidingViewController resetTopView];
+    }];
+}
+- (void)viewDidUnload {
+    [self setNameLabel:nil];
+    [self setMenuTableView:nil];
+    [super viewDidUnload];
+}
+
+- (void)loginViewControllerWasSelected:(CreateEmployerAccountViewController *)controller
+{
+    UIStoryboard *storyboard;
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+    } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+    }
+    
+    LoginViewController *loginController = [storyboard instantiateViewControllerWithIdentifier:@"Login"];
+    loginController.delegate = (id) self;
+    
+    self.slidingViewController.topViewController = loginController;
+    
+}
+- (void)loginPersonalViewControllerWasSelected:(CreateEmployerAccountViewController *)controller
+{
+    UIStoryboard *storyboard;
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+    } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+    }
+    
+    LoginPersonalViewController *loginPersonalController = [storyboard instantiateViewControllerWithIdentifier:@"LoginPersonalView"];
+    
+    loginPersonalController.delegate = (id) self;
+    
+    UINavigationController *navLoginPersonal = [[UINavigationController alloc] initWithRootViewController:loginPersonalController];
+    
+    /*   [self.slidingViewController anchorTopViewOffScreenTo:ECRight animations:nil onComplete:^{
+     CGRect frame = self.slidingViewController.topViewController.view.frame;
+     self.slidingViewController.topViewController = newTopViewController;
+     self.slidingViewController.topViewController.view.frame = frame;
+     [self.slidingViewController resetTopView];
+     
+     }];
+     */
+    
+    self.slidingViewController.topViewController = navLoginPersonal;
+    
+    
+    
+}
+- (void)createPersonalViewControllerWasSelected:(LoginPersonalViewController *)controller
+{
+    UIStoryboard *storyboard;
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+    } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+    }
+    
+    LoginViewController *createPersonalController = [storyboard instantiateViewControllerWithIdentifier:@"CreateAccount"];
+    
+    createPersonalController.delegate = (id) self;
+    
+    UINavigationController *navCreaePersonal = [[UINavigationController alloc] initWithRootViewController:createPersonalController];
+    
+   
+    self.slidingViewController.topViewController = navCreaePersonal;
+    
+}
+
+- (void)createViewControllerWasSelected:(LoginViewController *)controller
+{
+    UIStoryboard *storyboard;
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+    } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+    }
+
+    CreateEmployerAccountViewController *createController = [storyboard instantiateViewControllerWithIdentifier:@"CreateEmployerAccount"];
+    createController.delegate = (id) self;
+
+    self.slidingViewController.topViewController = createController;
+
+}
+
+@end

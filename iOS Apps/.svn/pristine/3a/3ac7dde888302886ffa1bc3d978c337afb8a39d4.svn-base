@@ -1,0 +1,449 @@
+//
+//  InitialSlidingViewController.m
+//  ECSlidingViewController
+//
+//  Created by Michael Enriquez on 1/25/12.
+//  Copyright (c) 2012 EdgeCase. All rights reserved.
+//
+
+#import "InitialSlidingViewController.h"
+#import "LoginViewController.h"
+#import "SubscriptionViewController.h"
+#import "CommonLib.h"
+#import "user.h"
+#import "LocationEntityFields.h"
+#import "SetupPersonalAccount.h"
+#import "CreateEmployerAccountViewController.h"
+
+@implementation InitialSlidingViewController
+@synthesize spinner = _spinner;
+
+-(id)initWithCoder:(NSCoder *)decoder
+{
+    self = [super initWithCoder:decoder];
+    
+    UIStoryboard *storyboard;
+    
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+    } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+    }
+
+#ifndef PERSONAL_VERSION
+    wizardController = [storyboard instantiateViewControllerWithIdentifier:@"WizardViewController"];
+
+    addPersonInitialNavController = [storyboard instantiateViewControllerWithIdentifier:@"AddPersonInitialNav"];
+ //   UIViewController *tmpController = (AddPersonInitialViewController *) addPersonInitialNavController.topViewController ;
+
+//    if ([tmpController isKindOfClass:[AddPersonInitialViewController class]])
+//    {
+    addPersonIntitialController =  (AddPersonInitialViewController *) addPersonInitialNavController.topViewController ;
+  //  addPersonIntitialController = [storyboard instantiateViewControllerWithIdentifier:@"AddPersonViewController"];
+    
+    addPersonIntitialController.delegate = (id) self;
+//    }
+    
+    createController = [storyboard instantiateViewControllerWithIdentifier:@"CreateEmployerAccount"];
+    createController.delegate = (id) self;
+    
+    createControllerStep2 = [storyboard instantiateViewControllerWithIdentifier:@"CreateEmployerAccountStep2"];
+    createControllerStep2.delegate = (id) self;
+    
+    loginController = [storyboard instantiateViewControllerWithIdentifier:@"Login"];
+    loginController.delegate = (id) self;
+#endif
+
+
+    return self;
+}
+
+
+- (void)viewDidLoad {
+  [super viewDidLoad];
+//    if ([CommonLib DoWeHaveNetworkConnection]){
+    //this will prevent the screens to overlap the navigation bar for iOS 7
+    self.navigationController.navigationBar.translucent = NO;
+
+    //tell the App Delegate to launch the main view controller
+    AppDelegate *mainDelegate = (AppDelegate*)[[UIApplication sharedApplication]delegate];
+    if (mainDelegate.subscriptionWebService == nil)
+        mainDelegate.subscriptionWebService = [[SubscriptionWebService alloc] init];
+
+    mainDelegate.subscriptionWebService.delegate = (id) self;
+
+  
+  UIStoryboard *storyboard;
+  
+  if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+    storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+  } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+    storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+  }
+  
+    if (![self firstTimeinApp]){
+        UserClass *user = [UserClass getInstance];
+        if ([user.userType isEqualToString:@"employer"])
+        {
+            //if employer has no employees then show the initial screen for adding employees
+            if ([user.employeeCount intValue] == 0)
+                self.topViewController = addPersonInitialNavController;
+            else
+                self.topViewController = [storyboard instantiateViewControllerWithIdentifier:@"NavigationTop"];
+            
+        }
+        else
+            self.topViewController = [storyboard instantiateViewControllerWithIdentifier:@"FirstTop"];        
+    }
+    else{
+        //if we are running the personal app version
+#ifdef PERSONAL_VERSION
+
+        self.topViewController = [storyboard instantiateViewControllerWithIdentifier:@"FirstTop"];
+        [self startSpinner];
+        SetupPersonalAccount *personalAccount = [[SetupPersonalAccount alloc]init];
+        personalAccount.delegate = (id) self;
+        [personalAccount setupIndivdualAccount];
+        
+#else
+
+        //turn off the top status bar
+        shouldHideStatusBar = YES;
+        [self performSelector:@selector(setNeedsStatusBarAppearanceUpdate)];
+
+        wizardController.delegate = (id) self;
+        self.topViewController = wizardController; //createController;
+ 
+      //  LoginViewController *loginController = [self.storyboard instantiateViewControllerWithIdentifier:@"Login"];
+        
+      //  loginController.delegate = (id) self;
+        
+       // self.topViewController = loginController;
+        
+#endif
+
+    }
+//    }
+//    else{
+ //      UIAlertView  *alert = [[UIAlertView alloc] initWithTitle:@"Network Status" message:@"Error Connecting to the internet. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+ //       [alert show];
+
+ //   }
+ 
+
+}
+- (BOOL)prefersStatusBarHidden {
+    return shouldHideStatusBar;
+}
+
+- (void)viewDidUnload
+{
+    _spinner = nil;
+    [super viewDidUnload];
+}
+
+- (void)CreateEmployerAccountViewControllerDidFinish:(LoginViewController *)controller
+{
+    UIStoryboard *storyboard;
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+    } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+    }
+    UserClass *user = [UserClass getInstance];
+    //if employer has no employees then show the initial screen for adding employees
+    if ([user.employeeCount intValue] == 0)
+        self.topViewController = addPersonInitialNavController;
+    else
+        self.topViewController = [storyboard instantiateViewControllerWithIdentifier:@"NavigationTop"];
+
+}
+
+- (void)CreateEmployerAccountStep2DidFinish:(CreateEmployerStep2ViewController *)controller
+{
+    shouldHideStatusBar = NO;
+    [self performSelector:@selector(setNeedsStatusBarAppearanceUpdate)];
+
+    UIStoryboard *storyboard;
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+    } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+    }
+    
+    UserClass *user = [UserClass getInstance];
+    //if employer has no employees then show the initial screen for adding employees
+    if ([user.employeeCount intValue] == 0)
+        self.topViewController = addPersonInitialNavController;
+    else
+        self.topViewController = [storyboard instantiateViewControllerWithIdentifier:@"NavigationTop"];
+
+}
+
+//if the customer selected signin from the create view then it will come back here so we can switch views
+- (void)loginViewControllerWasSelected:(CreateEmployerAccountViewController *)controller
+{
+   
+    self.topViewController = loginController;
+}
+
+//when the customer selects the last screen from the wizard show login
+- (void)wizardViewControllerDidFinish:(CreateEmployerAccountViewController *)controller
+{
+
+    self.topViewController = createController;
+}
+
+//if the customer selected signup from the login view then it will come back here so we can switch views
+- (void)createViewControllerWasSelected:(LoginViewController *)controller
+{
+    
+    self.topViewController = createController;
+}
+
+//if the customer goes back from create account step2 back to step 1
+- (void)createViewControllerFromStep2WasSelected:(CreateEmployerStep2ViewController *)controller
+{
+    
+    self.topViewController = createController;
+}
+
+//this gets called whent he customer presses the continue button from the create employer screen
+- (void)CreateEmployerStep2WasSelected:(CreateEmployerAccountViewController *)controller
+{
+    
+    self.topViewController = createControllerStep2;
+}
+
+- (void)loginViewControllerDidFinish:(LoginViewController *)controller
+{
+    shouldHideStatusBar = NO;
+    [self performSelector:@selector(setNeedsStatusBarAppearanceUpdate)];
+
+    UserClass *user = [UserClass getInstance];
+    UIStoryboard *storyboard;
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+    } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+    }
+    if ([user.userType isEqualToString:@"employer"])
+        self.topViewController = [storyboard instantiateViewControllerWithIdentifier:@"NavigationTop"];
+
+    else
+        self.topViewController = [storyboard instantiateViewControllerWithIdentifier:@"FirstTop"];
+}
+
+
+- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)toInterfaceOrientation
+{
+  return YES;
+}
+
+//takes this out for now
+- (void)subscriptionExpired{
+/*    SubscriptionViewController *subscriptionController = [self.storyboard instantiateViewControllerWithIdentifier:@"Subscription"];
+    //hook the delegate so we know when the customer's subscription has passed. We'll get a call back with subscriptionCheckPassed delgate call
+    subscriptionController.delegate = (id) self;
+    
+    self.topViewController = subscriptionController;
+ */
+    
+}
+- (void)subscriptionValid{
+    
+}
+
+-(void) subscriptionCheckPassed{
+    //all is good with the subscription so let them in the app. This gets passed from subscription view controller
+    UIStoryboard *storyboard;
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+    } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+    }
+    UserClass *user = [UserClass getInstance];
+    //if employer has no employees then show the initial screen for adding employees
+    if ([user.employeeCount intValue] == 0)
+        self.topViewController = addPersonInitialNavController;
+    else
+        self.topViewController = [storyboard instantiateViewControllerWithIdentifier:@"NavigationTop"];
+
+  
+}
+- (void)RegisterationFinished{
+
+    [self stopSpinner];
+ /*   UIStoryboard *storyboard;
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+    } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+    }
+    self.topViewController = [storyboard instantiateViewControllerWithIdentifier:@"FirstTop"];
+  */
+}
+
+//if an error happened when we registered like connection failed or something
+- (void)RegisterationFailed{
+    [self stopSpinner];
+}
+
+-(BOOL)firstTimeinApp{
+   // return true;
+
+    BOOL firstTime = false;
+//    LoginViewController *loginController;
+    //load up the user object with the user values that got saved when they logged in
+    UserClass *user = [UserClass getInstance];
+    
+    
+    user.userType = [[NSUserDefaults standardUserDefaults] stringForKey:@"userType"];
+    
+    
+    int tmpValue = [[NSUserDefaults standardUserDefaults] integerForKey:@"employerId"];
+    
+    user.employerID = [NSNumber numberWithInt:tmpValue];
+    tmpValue = [[NSUserDefaults standardUserDefaults] integerForKey:@"employeeId"];
+    user.userID = [NSNumber numberWithInt:tmpValue];
+    if ([user.userID intValue] == 0)
+    {
+        firstTime = true;
+        user.employeeCount = [NSNumber numberWithInt:0];
+        //record the install date so we can use it for review app trigger
+        user.appInstallDate = [NSDate date];
+        //save
+        [[NSUserDefaults standardUserDefaults] setObject:user.appInstallDate forKey:@"appInstallDate"];
+        [[NSUserDefaults standardUserDefaults] synchronize]; //write out the
+    }
+    else{
+        //this got added because employeeCount was added after people had ezClocker installed
+        //employeeCount is used to display the initial add person screen but if we know this is not their first time in the app then don't show it
+        user.employeeCount = [[NSUserDefaults standardUserDefaults] objectForKey:@"employeeCount"];
+        if (user.employeeCount == 0)
+            //count 1 is not the correct number but init it with a 1 then employee list screen will get the correct value when it loads.
+            user.employeeCount = [NSNumber numberWithInt:1];;
+
+    }
+    user.activeTimeEntryId = [[NSUserDefaults standardUserDefaults] objectForKey:@"activeTimeEntryId"];
+    user.lastEmailToSent = [[NSUserDefaults standardUserDefaults] objectForKey:@"lastEmailToSent"];
+
+    user.payrollStartDate = [[NSUserDefaults standardUserDefaults] objectForKey:@"payrollStartDate"];
+    user.payrollEndDate = [[NSUserDefaults standardUserDefaults] objectForKey:@"payrollEndDate"];
+    
+    int tmpClockMode = [[NSUserDefaults standardUserDefaults] integerForKey:@"clockMode"];
+    user.currentClockMode = tmpClockMode;
+    NSString *strValue = [[NSUserDefaults standardUserDefaults] stringForKey:@"authToken"];
+    user.authToken = strValue;
+    user.employerName = [[NSUserDefaults standardUserDefaults] stringForKey:@"name"];
+
+    NSString *strClockTime = [[NSUserDefaults standardUserDefaults] stringForKey:@"lastClockIn"];
+    if (strClockTime == nil) {
+        strClockTime = @"";
+    }
+    
+    user.userPin = [[NSUserDefaults standardUserDefaults] stringForKey:@"Passcode"];
+    if (user.userPin == nil) {
+        user.userPin = @"";
+    }
+    
+    user.lastClockIn = strClockTime;
+    strClockTime = [[NSUserDefaults standardUserDefaults] stringForKey:@"lastClockOut"];
+    if (strClockTime == nil) {
+        strClockTime = @"";
+    }
+    user.lastClockOut = strClockTime;
+
+    user.userEmail = [[NSUserDefaults standardUserDefaults] stringForKey:@"userEmail"];
+    if (user.userEmail == nil) {
+        user.userEmail = @"";
+    }
+    user.appInstallDate = [[NSUserDefaults standardUserDefaults] objectForKey:@"appInstallDate"];
+
+#ifdef PERSONAL_VERSION
+    user.indivdualName = [[NSUserDefaults standardUserDefaults] stringForKey: @"UserName"];
+    user.hasAccount = [[NSUserDefaults standardUserDefaults] stringForKey: @"HasAccount"];
+    user.individualGeneratedPassword = [[NSUserDefaults standardUserDefaults] stringForKey: @"generatedUserPassword"];
+    user.clockInReminders = [[[NSUserDefaults standardUserDefaults] arrayForKey:@"ClockInReminders" ] mutableCopy];
+    user.clockOutReminders = [[[NSUserDefaults standardUserDefaults] arrayForKey:@"ClockOutReminders" ] mutableCopy];
+    if (user.clockInReminders == nil)
+        user.clockInReminders = [[NSMutableArray alloc] init];
+    if (user.clockOutReminders == nil)
+        user.clockOutReminders = [[NSMutableArray alloc] init];
+    
+    if (([user.clockInReminders count] > 0) || ([user.clockOutReminders count] > 0))
+        user.remindersSet = YES;
+    else
+        user.remindersSet = NO;
+
+
+#else
+    if (firstTime){
+        //default to free when its the first time using the app but most likely we'll be calling the server to figure out if they have a subscription with us
+        user.subscription_freePlanActive = YES;
+        
+    }
+    else{
+        user.subscription_freePlanActive = [[NSUserDefaults standardUserDefaults] boolForKey: @"subscription_freePlanActive"];
+        user.subscription_HasActivePaidPlan = [[NSUserDefaults standardUserDefaults] boolForKey: @"subscription_HasActivePaidPlan"];
+    }
+    user.subscription_PlanPrice = [[NSUserDefaults standardUserDefaults] stringForKey: @"subscription_PlanPrice"];
+    user.subscription_planStartDate = [[NSUserDefaults standardUserDefaults] stringForKey: @"subscription_planStartDate"];
+    user.subscription_PlanExpireDate = [[NSUserDefaults standardUserDefaults] stringForKey: @"subscription_PlanExpireDate"];
+
+#endif
+ //   user.timeHistory = [[NSMutableDictionary alloc] initWithObjects:nil forKeys:nil];
+    
+    
+    // user.employerID = [NSNumber numberWithInt:46];
+    // user.userID = [NSNumber numberWithInt:46];
+    // user.authToken = @"553eb78b-f57f-4a95-9702-4dd011a2d898";
+    
+    //location persistence - load previous values
+    user.employerLocation.name = [[NSUserDefaults standardUserDefaults] stringForKey:LOCATION_NAME];
+    user.employerLocation.employerID = [NSNumber numberWithInteger:[[NSUserDefaults standardUserDefaults] integerForKey:EMPLOYER_ID]];
+    double lat = [[[NSUserDefaults standardUserDefaults] stringForKey:GPS_LATITUDE] doubleValue];
+    double lon = [[[NSUserDefaults standardUserDefaults] stringForKey:GPS_LONGITUDE] doubleValue];
+    user.employerLocation.location = CLLocationCoordinate2DMake(lat, lon);
+    
+    
+    return firstTime;
+
+}
+
+-(void) startSpinner{
+    if (!self.spinner)
+    {
+        self.spinner = [[MBProgressHUD alloc] initWithView:self.view];
+    }
+    self.spinner.labelText = @"Initializing";
+    [self.view addSubview:self.spinner];
+    [self.spinner show:YES];
+}
+
+-(void) stopSpinner{
+    [self.spinner hide:YES];
+}
+
+- (void)newEmployeeAdded:(AddPersonInitialViewController *)controller
+{
+    UIStoryboard *storyboard;
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPhone" bundle:nil];
+    } else if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        storyboard = [UIStoryboard storyboardWithName:@"iPad" bundle:nil];
+    }
+
+    UserClass *user = [UserClass getInstance];
+    //if we added the first employee then switch the top view to employeelist instead of the initial add person view controller
+    if ([user.employeeCount intValue] > 0)
+    {
+        self.topViewController = [storyboard instantiateViewControllerWithIdentifier:@"NavigationTop"];
+
+    }
+    
+}
+
+
+
+@end

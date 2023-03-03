@@ -1,0 +1,266 @@
+//
+//  EmployeeProfileViewController.h.m
+//  Created by Raya Khashab on 1/27/13.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "EmployeeProfileViewController.h"
+#import <QuartzCore/QuartzCore.h>
+#import "CommonLib.h"
+#import "user.h"
+
+@interface EmployeeProfileViewController()
+@property (strong, nonatomic) UIPopoverController *masterPopoverController;
+@end
+
+@implementation EmployeeProfileViewController
+@synthesize employeeImage;
+@synthesize inviteButton;
+@synthesize employeeNameLabel;
+@synthesize inviteInfoLabel;
+@synthesize employeeID;
+@synthesize employeeName;
+@synthesize employeeEmail;
+@synthesize acceptedInvite;
+@synthesize spinner;
+@synthesize masterPopoverController;
+
+
+
+-(void) LoadData{
+    inviteCalledFlag = NO;
+    employeeNameLabel.text = employeeName;
+    _emailLabel.text = employeeEmail;
+    //if the invite is accepted no need to show a different message
+    inviteInfoLabel.textColor=[UIColor lightGrayColor];
+    if ([acceptedInvite boolValue]) {
+        inviteInfoLabel.text = [[NSString alloc] initWithFormat:@"%@", @"employee has accepted the invite"];
+    }
+    else{
+        inviteInfoLabel.text = [[NSString alloc] initWithFormat:@"%@", @"employee has not accepted the invite"];
+
+    }
+    //reset the inivte button
+    inviteButton.enabled = YES;
+    [inviteButton setTitle:@"Re-invite employee to the app" forState:UIControlStateDisabled];
+    inviteButton.alpha = 1;
+    
+    ABRecordRef aContact = ABPersonCreate();
+    if(ABPersonHasImageData(aContact))
+    {
+        UIImage *image = [UIImage imageWithData:(__bridge NSData *)ABPersonCopyImageData(aContact)];
+        employeeImage.image = image;
+    }
+    
+    
+    //   ABAddressBookRef addressBook = ABAddressBookCreate();
+	// Search for the person named "Appleseed" in the address book
+    //	NSArray *people = (__bridge NSArray *)ABAddressBookCopyPeopleWithName(addressBook, CFSTR("employeeName"));
+	// Display "Appleseed" information if found in the address book 
+    //	if ((people != nil) && [people count])
+    //	{
+    //		ABRecordRef person = (__bridge ABRecordRef)[people objectAtIndex:0];
+    //       UIImage  *img = [UIImage imageWithData:(__bridge NSData *)ABPersonCopyImageDataWithFormat(person, kABPersonImageFormatThumbnail)];
+    //        employeeImage.image = img;
+    //    }
+    
+    //dismiss popover if you are iPad
+    if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPad) {
+        if (self.masterPopoverController != nil){
+            [self.masterPopoverController dismissPopoverAnimated:YES];
+        }
+    }
+
+    
+}
+
+-(id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
+{
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    if (self){
+        self.title = NSLocalizedString(@"General", @"General");
+        self.tabBarItem.image = [UIImage imageNamed:@"user"];
+    }
+    
+    user = [UserClass getInstance];
+    return self;
+}
+
+- (void)viewDidLoad
+{
+    self.view.backgroundColor = UIColorFromRGB(GRAY_BACKGROUND_COLOR);
+
+    [super viewDidLoad];
+    // Do any additional setup after loading the view from its nib.
+}
+
+- (void)viewDidUnload
+{
+    [self setEmployeeNameLabel:nil];
+//    [self setinviteInfoLabel:nil];
+    [self setEmployeeImage:nil];
+    [self setInviteButton:nil];
+    [self setEmailLabel:nil];
+    [super viewDidUnload];
+    // Release any retained subviews of the main view.
+    // e.g. self.myOutlet = nil;
+}
+
+- (void)viewWillAppear:(BOOL)animated
+{
+	[super viewWillAppear: animated];
+    self.parentViewController.navigationItem.rightBarButtonItems = nil;
+    [self.parentViewController.navigationItem setTitle:employeeName];
+
+    [self LoadData];
+}
+
+
+- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
+{
+    if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPhone) {
+        return (interfaceOrientation != UIInterfaceOrientationPortraitUpsideDown);
+    } else {
+        return YES;
+    }
+}
+
+
+-(void) startSpinner{
+    if (!self.spinner)
+    {
+        self.spinner = [[MBProgressHUD alloc] initWithView:self.view];
+    }
+    self.spinner.labelText = @"Please Wait..";
+    [self.view addSubview:self.spinner];
+    [self.spinner show:YES];
+}
+
+-(void) stopSpinner{
+    [self.spinner hide:YES];
+}
+
+- (IBAction)doInvite:(id)sender {
+    inviteCalledFlag = YES;
+//    [self startSpinner];
+    [self callEmployeeReInviteWebService];
+}
+
+
+
+
+-(void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response
+{
+    if ([response isKindOfClass: [NSHTTPURLResponse class]]) {
+        int statusCode = [(NSHTTPURLResponse*) response statusCode];
+        if (statusCode == SERVICE_UNAVAILABLE_ERROR){
+            [self stopSpinner];
+            [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+            
+            //error 503 is when tomcat is down
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+        }
+    }
+    
+    
+    data = [[NSMutableData alloc] init];
+}
+-(void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)dataIn
+{
+    [data appendData:dataIn];
+}
+
+
+-(void)connectionDidFinishLoading:(NSURLConnection *)connection
+{
+    //just assume it went through
+//    [self stopSpinner];
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    
+/*    UIAlertView *alert;
+    NSError *error = nil;
+    NSDictionary *results = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
+    NSString *resultMessage = [results valueForKey:@"message"];
+    if (![resultMessage isEqualToString:@"Success"])
+    {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Failure to Send Invite Message" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+    }
+*/
+}
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error
+{
+    // release the connection, and the data object
+    // receivedData is declared as a method instance elsewhere
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    [self stopSpinner];
+    
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+    
+    [alert show];
+    
+    connection = nil;
+    data = nil;
+}
+
+-(void) callEmployeeReInviteWebService{
+    
+    UIAlertView *alert;
+    NSString *httpPostString;
+    NSString *request_body;
+
+    httpPostString = [NSString stringWithFormat:@"%@employee/reinvite/%@/%@", SERVER_URL, employeeID, user.employerID];
+    
+    request_body = [NSString 
+                    stringWithFormat:@"authToken=%@&emailAddress=%@",
+                    [user.authToken  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [ employeeEmail  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding
+                     ]];   
+    
+    
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    
+    //set HTTP Method
+    [urlRequest setHTTPMethod:@"POST"];
+    
+    //set request body into HTTPBody.
+    [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    if (connection)
+    {
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = YES;
+        [inviteButton setTitle:@"An invite email has been sent" forState:UIControlStateDisabled];
+        inviteButton.enabled = NO;
+        inviteButton.alpha = 0.5;
+    }
+    else {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Connection to the server failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+        
+    }
+    
+    
+}
+
+- (void)splitViewController:(UISplitViewController *)splitController willHideViewController:(UIViewController *)viewController withBarButtonItem:(UIBarButtonItem *)barButtonItem forPopoverController:(UIPopoverController *)popoverController
+{
+    barButtonItem.title = NSLocalizedString(@"Employees", @"Employees");
+    [self.navigationItem setLeftBarButtonItem:barButtonItem animated:YES];
+    self.masterPopoverController = popoverController;
+}
+
+- (void)splitViewController:(UISplitViewController *)splitController willShowViewController:(UIViewController *)viewController invalidatingBarButtonItem:(UIBarButtonItem *)barButtonItem
+{
+    // Called when the view is shown again in the split view, invalidating the button and popover controller.
+    [self.navigationItem setLeftBarButtonItem:nil animated:YES];
+    self.masterPopoverController = nil;
+}
+
+
+
+
+@end

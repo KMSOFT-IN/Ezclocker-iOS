@@ -1,0 +1,117 @@
+//
+//  user.m
+//  TCS Mobile
+//
+//  Created by Raya Khashab on 9/2/12.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "user.h"
+#import "NSString+Extensions.h"
+#import "NSDate+Extensions.h"
+
+@implementation UserClass
+
+@synthesize employerID, userID, userType, authToken, currentClockMode, lastClockIn, lastClockOut, userPin, employerName,
+            remindersSet, userEmail, availableEmployeeSlots,
+subscription_PlanPrice, subscription_PlanExpireDate, subscription_planStartDate, userGaveUsRatingFeedback, appLaunchCounter, subscription_freePlanActive, subscription_HasActivePaidPlan, clockInReminders, clockOutReminders, employeeCount, payrollStartDate, payrollEndDate, lastEmailToSent, disableTimeEntryEditing,
+    pushNotificationsEnabled;
+
+static UserClass *instance = nil;
+
++(UserClass*)getInstance{
+    if (instance == nil)
+    {
+        instance = [UserClass new];
+        instance.employerLocation = [[EmployerLocation alloc] init];
+        instance.subscription_planStartDate = @"";
+        instance.subscription_PlanExpireDate = @"";
+        instance.clockInReminders = [[NSMutableArray alloc] init];
+        instance.clockOutReminders = [[NSMutableArray alloc] init];
+        instance.employeeNameIDList = [[NSMutableDictionary alloc] init];
+        instance.locationNameAddressList = [[NSMutableArray alloc] init];
+    }
+    return instance;
+}
+
+
+- (void)checkPayrollStartDate:(id<StartEndDateInterface>)datesInterface {
+    NSString* testPayrollStartDate = [NSString trim:self.payrollStartDate];
+    NSString* testPayrollEndDate = [NSString trim:self.payrollEndDate];
+    
+    if (!([NSString isNilOrEmpty:testPayrollStartDate] && [NSString isNilOrEmpty:testPayrollEndDate]))
+    {
+        return;
+    }
+    
+    NSTimeInterval secondsPerDay = 24 * 60 * 60;
+    NSDate *today = [NSDate date];
+    NSDate *oneWeek;
+    
+    oneWeek = [today dateByAddingTimeInterval: -secondsPerDay * 7];
+    self.payrollStartDate =[oneWeek toDefaultDateString];
+    self.payrollEndDate = [today toDefaultDateString];
+    
+    // allow setting the startDate and endDate properties such as properties in TimeSheetsMasterViewController
+    if (datesInterface) {
+        [datesInterface setStartdate:self.payrollStartDate];
+        [datesInterface setEnddate:self.payrollEndDate];
+    }
+    
+    NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+    
+    //save dates
+    [defaults setObject:self.payrollStartDate forKey:@"payrollStartDate"];
+    [defaults setObject:self.payrollEndDate forKey:@"payrollEndDate"];
+    [defaults synchronize]; //write out the data
+}
+
++(void)releaseInstance{
+    instance = nil;
+}
+
+- (NSString*)getModifiedBy {
+    NSString *modifiedBy = [NSString trim:self.employerName];
+    if ([NSString isNilOrEmpty:modifiedBy]) {
+        modifiedBy = [NSString trim:self.userEmail];
+    }
+    return modifiedBy;
+}
+
+- (void) scheduleNotificationOn:(NSDate*) fireDate
+                           text:(NSString*) alertText
+                         action:(NSString*) alertAction
+                          sound:(NSString*) soundfileName
+                    launchImage:(NSString*) launchImage
+                        andInfo:(NSDictionary*) userInfo
+
+{
+	UILocalNotification *localNotification = [[UILocalNotification alloc] init];
+    localNotification.fireDate = fireDate;
+    localNotification.timeZone = [NSTimeZone defaultTimeZone];	
+    
+    localNotification.alertBody = alertText;
+    localNotification.alertAction = alertAction;
+	localNotification.repeatInterval = NSCalendarUnitDay;
+    
+	if(soundfileName == nil)
+	{
+		localNotification.soundName = UILocalNotificationDefaultSoundName;
+	}
+	else
+	{
+		localNotification.soundName = soundfileName;
+	}
+    
+	localNotification.alertLaunchImage = launchImage;
+    
+	//self.badgeCount ++;
+    localNotification.applicationIconBadgeNumber = -1;//self.badgeCount;
+    localNotification.userInfo = userInfo;
+    
+	// Schedule it with the app
+    [[UIApplication sharedApplication] scheduleLocalNotification:localNotification];
+
+}
+
+@end

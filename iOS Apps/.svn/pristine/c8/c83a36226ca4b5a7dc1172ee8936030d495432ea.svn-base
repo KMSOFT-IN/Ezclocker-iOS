@@ -1,0 +1,32 @@
+//
+//  EmployerSettingsViewController.h
+//  ezClocker
+//
+//  Created by Raya Khashab on 8/31/16.
+//  Copyright © 2016 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import "UITableViewControllerEx.h"
+
+@interface EmployerSettingsViewController : UITableViewControllerEx <UIPickerViewDataSource, UIPickerViewDelegate>
+{
+    NSArray *pickerData;
+    int selectedStartDate;
+}
+@property (weak, nonatomic) IBOutlet UILabel *appVersionLabel;
+- (IBAction)revealMenu:(id)sender;
+@property (weak, nonatomic) IBOutlet UISwitch *allowPushNotificationsSwitch;
+- (IBAction)pushNotificationSwitchChanged:(id)sender;
+- (IBAction)allowEmployeesEditSwitchChanged:(id)sender;
+@property (weak, nonatomic) IBOutlet UIPickerView *scheduleDayPicker;
+@property (weak, nonatomic) IBOutlet UISwitch *allowEditSwitch;
+- (IBAction)doSave:(id)sender;
+- (IBAction)doSwitchChanged:(id)sender;
+@property (weak, nonatomic) IBOutlet UIButton *scheduleDayBtn;
+- (IBAction)doScheduleDayBtnClick:(id)sender;
+@property (weak, nonatomic) IBOutlet UIBarButtonItem *saveBtn;
+@property (weak, nonatomic) IBOutlet UITableViewCell *scheduleStartDayCell;
+@property (strong, nonatomic) IBOutlet UITableView *settingsTableView;
+
+@end

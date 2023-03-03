@@ -1,0 +1,461 @@
+//
+//  EmployeeProfileViewController.h.m
+//  Created by Raya Khashab on 1/27/13.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "EmployeeProfileViewController.h"
+#import <QuartzCore/QuartzCore.h>
+#import "CommonLib.h"
+#import "user.h"
+#import "ClockWebServices.h"
+#import "CheckClockStatusWebService.h"
+
+@interface EmployeeProfileViewController()
+@property (strong, nonatomic) UIPopoverController *masterPopoverController;
+@end
+
+@implementation EmployeeProfileViewController
+@synthesize employeeImage;
+@synthesize inviteButton;
+@synthesize employeeNameLabel;
+@synthesize inviteInfoLabel;
+@synthesize employeeID;
+@synthesize employeeName;
+@synthesize employeeEmail;
+@synthesize acceptedInvite;
+@synthesize spinner;
+@synthesize masterPopoverController;
+
+
+
+-(void) LoadData{
+    inviteCalledFlag = NO;
+    employeeNameLabel.text = employeeName;
+    _emailLabel.text = employeeEmail;
+    //if the invite is accepted no need to show a different message
+    inviteInfoLabel.textColor=[UIColor lightGrayColor];
+    if ([acceptedInvite boolValue]) {
+        inviteInfoLabel.text = [[NSString alloc] initWithFormat:@"%@", @"employee has accepted the invite"];
+    }
+    else{
+        inviteInfoLabel.text = [[NSString alloc] initWithFormat:@"%@", @"employee has not accepted the invite"];
+
+    }
+    //reset the inivte button
+    inviteButton.enabled = YES;
+    [inviteButton setTitle:@"Re-invite employee to the app" forState:UIControlStateDisabled];
+    inviteButton.alpha = 1;
+    
+    ABRecordRef aContact = ABPersonCreate();
+    if(ABPersonHasImageData(aContact))
+    {
+        UIImage *image = [UIImage imageWithData:(__bridge NSData *)ABPersonCopyImageData(aContact)];
+        employeeImage.image = image;
+    }
+    
+    
+    //   ABAddressBookRef addressBook = ABAddressBookCreate();
+	// Search for the person named "Appleseed" in the address book
+    //	NSArray *people = (__bridge NSArray *)ABAddressBookCopyPeopleWithName(addressBook, CFSTR("employeeName"));
+	// Display "Appleseed" information if found in the address book 
+    //	if ((people != nil) && [people count])
+    //	{
+    //		ABRecordRef person = (__bridge ABRecordRef)[people objectAtIndex:0];
+    //       UIImage  *img = [UIImage imageWithData:(__bridge NSData *)ABPersonCopyImageDataWithFormat(person, kABPersonImageFormatThumbnail)];
+    //        employeeImage.image = img;
+    //    }
+    
+    //dismiss popover if you are iPad
+    if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPad) {
+        if (self.masterPopoverController != nil){
+            [self.masterPopoverController dismissPopoverAnimated:YES];
+        }
+    }
+
+    
+}
+
+-(id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
+{
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    if (self){
+        self.title = NSLocalizedString(@"Manage", @"Manage");
+        self.tabBarItem.image = [UIImage imageNamed:@"user"];
+    }
+    
+    user = [UserClass getInstance];
+    return self;
+}
+
+- (void)viewDidLoad
+{
+    self.view.backgroundColor = UIColorFromRGB(GRAY_BACKGROUND_COLOR);
+
+    [super viewDidLoad];
+    // Do any additional setup after loading the view from its nib.
+    //color the buttons
+
+    _clockInBtn.backgroundColor = UIColorFromRGB(ORANGE_COLOR);
+    _clockOutBtn.backgroundColor = UIColorFromRGB(ORANGE_COLOR);
+    _clockInLabel.hidden = YES;
+    _clockOutLabel.hidden = YES;
+
+}
+
+- (void)viewDidUnload
+{
+    [self setEmployeeNameLabel:nil];
+//    [self setinviteInfoLabel:nil];
+    [self setEmployeeImage:nil];
+    [self setInviteButton:nil];
+    [self setEmailLabel:nil];
+    [super viewDidUnload];
+    // Release any retained subviews of the main view.
+    // e.g. self.myOutlet = nil;
+}
+
+- (void)viewWillAppear:(BOOL)animated
+{
+	[super viewWillAppear: animated];
+    self.parentViewController.navigationItem.rightBarButtonItems = nil;
+    [self.parentViewController.navigationItem setTitle:employeeName];
+
+    [self LoadData];
+    
+    [self checkClockStatus];
+}
+
+
+- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
+{
+    if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPhone) {
+        return (interfaceOrientation != UIInterfaceOrientationPortraitUpsideDown);
+    } else {
+        return YES;
+    }
+}
+
+
+-(void) startSpinner{
+    if (!self.spinner)
+    {
+        self.spinner = [[MBProgressHUD alloc] initWithView:self.view];
+    }
+    self.spinner.labelText = @"Please Wait..";
+    [self.view addSubview:self.spinner];
+    [self.spinner show:YES];
+}
+
+-(void) stopSpinner{
+    [self.spinner hide:YES];
+}
+
+- (IBAction)doClockIn:(id)sender {
+    [self doClockInSteps];
+}
+
+- (IBAction)doClockOut:(id)sender {
+    [self doClockOutSteps];
+
+}
+
+- (IBAction)doInvite:(id)sender {
+    inviteCalledFlag = YES;
+//    [self startSpinner];
+    [self callEmployeeReInviteWebService];
+}
+
+
+
+
+-(void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response
+{
+    if ([response isKindOfClass: [NSHTTPURLResponse class]]) {
+        int statusCode = [(NSHTTPURLResponse*) response statusCode];
+        if (statusCode == SERVICE_UNAVAILABLE_ERROR){
+            [self stopSpinner];
+            [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+            
+            //error 503 is when tomcat is down
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+        }
+    }
+    
+    
+    data = [[NSMutableData alloc] init];
+}
+-(void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)dataIn
+{
+    [data appendData:dataIn];
+}
+
+
+-(void)connectionDidFinishLoading:(NSURLConnection *)connection
+{
+    //just assume it went through
+//    [self stopSpinner];
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    
+/*    UIAlertView *alert;
+    NSError *error = nil;
+    NSDictionary *results = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
+    NSString *resultMessage = [results valueForKey:@"message"];
+    if (![resultMessage isEqualToString:@"Success"])
+    {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Failure to Send Invite Message" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+    }
+*/
+}
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error
+{
+    // release the connection, and the data object
+    // receivedData is declared as a method instance elsewhere
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    [self stopSpinner];
+    
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+    
+    [alert show];
+    
+    connection = nil;
+    data = nil;
+}
+
+-(void) callEmployeeReInviteWebService{
+    
+    UIAlertView *alert;
+    NSString *httpPostString;
+    NSString *request_body;
+
+    httpPostString = [NSString stringWithFormat:@"%@employee/reinvite/%@/%@", SERVER_URL, employeeID, user.employerID];
+    
+    request_body = [NSString 
+                    stringWithFormat:@"authToken=%@&emailAddress=%@",
+                    [user.authToken  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [ employeeEmail  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding
+                     ]];   
+    
+    
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    
+    //set HTTP Method
+    [urlRequest setHTTPMethod:@"POST"];
+    
+    //set request body into HTTPBody.
+    [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    if (connection)
+    {
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = YES;
+        [inviteButton setTitle:@"An invite email has been sent" forState:UIControlStateDisabled];
+        inviteButton.enabled = NO;
+        inviteButton.alpha = 0.5;
+    }
+    else {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Connection to the server failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+        
+    }
+    
+    
+}
+
+- (void)splitViewController:(UISplitViewController *)splitController willHideViewController:(UIViewController *)viewController withBarButtonItem:(UIBarButtonItem *)barButtonItem forPopoverController:(UIPopoverController *)popoverController
+{
+    barButtonItem.title = NSLocalizedString(@"Employees", @"Employees");
+    [self.navigationItem setLeftBarButtonItem:barButtonItem animated:YES];
+    self.masterPopoverController = popoverController;
+}
+
+- (void)splitViewController:(UISplitViewController *)splitController willShowViewController:(UIViewController *)viewController invalidatingBarButtonItem:(UIBarButtonItem *)barButtonItem
+{
+    // Called when the view is shown again in the split view, invalidating the button and popover controller.
+    [self.navigationItem setLeftBarButtonItem:nil animated:YES];
+    self.masterPopoverController = nil;
+}
+
+-(void) enableButton:(UIButton*) curBtn {
+    //make sure the button is set to enabled
+    curBtn.enabled = TRUE;
+    curBtn.alpha = 1.0f;
+    [[curBtn layer] setCornerRadius:4.0f];
+    
+    
+    //  UIColor *blueRidgeMtns = UIColorFromRGB(0x63a8cc);
+    //    self.topNavigationBar.titleTextAttributes = @{UITextAttributeTextColor : [UIColor blackColor]};
+    [[UINavigationBar appearance] setTitleTextAttributes:
+     [NSDictionary dictionaryWithObjectsAndKeys:
+      [UIColor whiteColor], UITextAttributeTextColor,
+      [UIColor clearColor], UITextAttributeTextShadowColor,
+      [UIFont fontWithName:@"Helvetica Neue-Bold" size:0.0], UITextAttributeFont, nil]];
+    
+    
+    //  [self.topNavigationBar setBackgroundImage:[UIImage imageNamed: @"header_background"]
+    //               forBarMetrics:UIBarMetricsDefault];
+    //    UIImage *image = [UIImage imageNamed:@"header_background.jpg"];
+    //    [[UINavigationBar appearance] setBackgroundImage:image forBarMetrics:UIBarMetricsDefault];
+    //  [[UINavigationBar appearance] setTintColor:blueColorOp];
+    
+    //   [[UIBarButtonItem appearance] setBackgroundImage:[[UIImage alloc] init] forState:UIControlStateNormal barMetrics:UIBarMetricsDefault];
+    
+    //ios 7
+    //  self.navigationController.navigationBar.translucent = NO;
+    
+    
+    //make the text white
+    curBtn.backgroundColor = UIColorFromRGB(ORANGE_COLOR);
+    
+    //  [curBtn setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
+    
+}
+
+-(void) disableButton:(UIButton*) curBtn{
+    //[[clockInBtn layer] setMasksToBounds:YES];
+    [[curBtn layer] setCornerRadius:7.0f];
+    [[curBtn layer] setBorderWidth:0.5f];
+    curBtn.backgroundColor = UIColorFromRGB(ORANGE_COLOR);
+    
+    //remove the Gradient layer which gave use the blue color shades
+    CALayer* layer = [curBtn.layer valueForKey:@"GradientLayer"];
+    [layer removeFromSuperlayer];
+    [curBtn.layer setValue:nil forKey:@"GradientLayer"];
+    
+    //diable the button
+    curBtn.enabled = FALSE;
+    curBtn.alpha = 0.5f;
+    [curBtn setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
+    
+}
+
+-(void)doClockInSteps{
+    [self startSpinner];
+    self.spinner.labelText = @"Clocking in..";
+    
+ //   lastClockInTime = self.getCurrentDateTime;
+//    strLastClockInTime = [formatterDateTime12hr stringFromDate:lastClockInTime];
+//    strLastClockOutTime = @"";
+    
+/*#ifndef PERSONAL_VERSION
+    
+    [ self performSelector: @selector(getLocation:)
+                withObject: nil
+                afterDelay: 0
+     ];
+#endif
+  */  
+    //take out
+    // [self updateUI];
+//    self.lastClockMode = ClockModeIn;
+//    self.lastClockTime = lastClockInTime;
+    ClockWebServices *clockWebServices = [[ClockWebServices alloc] init];
+    clockWebServices.delegate = self;
+    [clockWebServices callTCSWebService:ClockModeIn dateTime:[NSDate date] employeeID: employeeID locOverride:YES];
+}
+
+
+-(void) doClockOutSteps{
+    [self startSpinner];
+    spinner.labelText = @"Clocking out..";
+    //    lastClockOutTime = self.getCurrentDateTime;
+    //    strLastClockOutTime = [formatterDateTime12hr stringFromDate:lastClockOutTime ];
+    //take out
+    // [self updateUI];
+    //    self.lastClockMode = ClockModeOut;
+    //    self.lastClockTime = lastClockOutTime;
+    ClockWebServices *clockWebServices = [[ClockWebServices alloc] init];
+    clockWebServices.delegate = self;
+    [clockWebServices callTCSWebService:ClockModeOut dateTime:[NSDate date] employeeID: employeeID  locOverride:YES];
+    
+}
+//this is the callback that comes from the clock in/out web service. The error code will tell us what to do
+- (void)clockServiceCallDidFinish:(ClockWebServices *)controller ErrorCode: (int) errorValue ClockTime: (NSString*) clockTime ClockMode: (ClockMode) clockMode
+{
+    [self stopSpinner];
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+
+    if (errorValue  == 0){
+        if (clockMode == ClockModeIn)
+        {
+            [self enableButton:_clockOutBtn];
+            [self disableButton:_clockInBtn];
+            user.currentClockMode = clockMode;
+            _clockInLabel.hidden = NO;
+            _clockInLabel.text = [[NSString alloc] initWithFormat:@"Clock In: %@", clockTime];
+            _clockOutLabel.hidden = YES;
+        }
+        else{
+            [self enableButton:_clockInBtn];
+            [self disableButton:_clockOutBtn];
+            user.currentClockMode = clockMode;
+            _clockOutLabel.hidden = NO;
+
+            _clockOutLabel.text = [[NSString alloc] initWithFormat:@"Clock Out: %@", clockTime];;
+        }
+        
+    }
+    //if error code = 1 that means that person has already clocked in from the website so
+    else if (errorValue  == 1){
+        
+        [self enableButton:_clockOutBtn];
+        [self disableButton:_clockInBtn];
+        user.currentClockMode = ClockModeOut;
+        
+ //       strLastClockInTime = @"";
+    }
+    //if error code = 2 that means that person has already clocked out from the website so
+    else if (errorValue  == 2){
+        [self enableButton:_clockInBtn];
+        [self disableButton:_clockOutBtn];
+        user.currentClockMode = ClockModeIn;
+//        strLastClockOutTime = @"";
+
+    }
+}
+
+-(void) checkClockStatus{
+    [self startSpinner];
+    spinner.labelText = @"Connecting to Server..";
+    CheckClockStatusWebService *checkClockWebService = [[CheckClockStatusWebService alloc] init];
+    checkClockWebService.delegate = self;
+    [checkClockWebService checkClockStatus: employeeID];
+}
+
+//this is the callback that comes from the clock status web service. The error code will tell us what to do
+- (void)checkClockStatusServiceCallDidFinish:(CheckClockStatusWebService *)controller ErrorCode: (int) errorValue ClockTime: (NSString*) clockTime TimeEntryId: (NSNumber *) timeEntryId Notes: (NSString *) notes{
+
+    [self stopSpinner];
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+
+    //if no error
+    if (errorValue == 0)
+    {
+        if ([clockTime length] > 0)
+        {
+            _clockInLabel.hidden = NO;
+            _clockInLabel.text = [[NSString alloc] initWithFormat:@"Clock In: %@", clockTime];;
+            _clockOutLabel.hidden = YES;
+            [self enableButton:_clockOutBtn];
+            [self disableButton:_clockInBtn];
+
+        }
+        else{
+            
+            _clockInLabel.hidden = YES;
+            _clockOutLabel.hidden = YES;
+            [self enableButton:_clockInBtn];
+            [self disableButton:_clockOutBtn];
+        }
+  
+
+    }
+}
+
+
+
+@end

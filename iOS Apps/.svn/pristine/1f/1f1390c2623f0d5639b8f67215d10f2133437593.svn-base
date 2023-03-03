@@ -1,0 +1,44 @@
+//
+//  AddEmployeeViewController.h
+//  TCS Mobile
+//
+//  Created by Raya Khashab on 1/19/13.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import "MBProgressHUD.h"
+
+@class AddEmployeeViewController;
+
+@protocol addEmployeeViewControllerDelegate
+//- (void)addEmployeeViewControllerDidFinish:(AddEmployeeViewController *)controller;
+- (void)addEmployeeViewControllerDidFinish:(UIViewController *)controller;
+@end
+
+@interface AddEmployeeViewController : UIViewController<NSURLConnectionDataDelegate, UITextFieldDelegate>{
+    NSMutableData *data;
+    bool EmployeeAdded;
+    bool EmployeeInvited;
+    bool boxChecked;
+    UIImage *checkboxImage;
+    UIImage *uncheckboxImage;
+}
+- (IBAction)doEmailEditingDidBegin:(id)sender;
+@property (weak, nonatomic) IBOutlet UILabel *InviteSentLabel;
+@property (strong, nonatomic) MBProgressHUD *spinner;
+@property (strong, nonatomic) IBOutlet UIView *mainViewController;
+- (IBAction)nameEditingDidBegin:(id)sender;
+@property (weak, nonatomic) IBOutlet UIScrollView *scrollView;
+
+@property (assign, nonatomic) IBOutlet id <addEmployeeViewControllerDelegate> delegate;
+@property (weak, nonatomic) IBOutlet UIButton *InviteBtn;
+@property (weak, nonatomic) IBOutlet UITextField *emailTextField;
+@property (weak, nonatomic) IBOutlet UITextField *nameTextField;
+- (IBAction)doInvite:(id)sender;
+
+
+- (IBAction)doCancelAddEmployee:(id)sender;
+
+- (IBAction)doSaveAddEmployee:(id)sender;
+@end

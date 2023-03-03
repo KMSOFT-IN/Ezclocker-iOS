@@ -1,0 +1,35 @@
+//
+//  WizardViewController.h
+//  ezClocker
+//
+//  Created by Raya Khashab on 8/4/15.
+//  Copyright (c) 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import "PageContentViewController.h"
+
+@class WizardViewController;
+
+//create a delegate so when we reach the last screen we can call the parent to do something
+@protocol WizardViewControllerDelegate
+- (void)wizardViewControllerDidFinish:(WizardViewController *)controller;
+
+@end
+
+@interface WizardViewController : UIViewController <UIPageViewControllerDataSource>
+
+- (IBAction)doGetStarted:(id)sender;
+@property (assign, nonatomic) IBOutlet id <WizardViewControllerDelegate> delegate;
+@property (weak, nonatomic) IBOutlet UIButton *getStartedButton;
+@property (strong, nonatomic) UIPageViewController *pageViewController;
+@property (strong, nonatomic) NSArray *pageImages;
+@property (strong, nonatomic) NSArray *logoImages;
+@property (strong, nonatomic) NSArray *titleNames;
+@property (strong, nonatomic) NSArray *subTitleNames;
+@property (strong, nonatomic)IBOutlet NSLayoutConstraint *widthConstraint;
+
+@property (weak, nonatomic) IBOutlet UIView *addView;
+
+
+@end

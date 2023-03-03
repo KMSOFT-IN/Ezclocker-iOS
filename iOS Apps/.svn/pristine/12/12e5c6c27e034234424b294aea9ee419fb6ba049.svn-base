@@ -1,0 +1,177 @@
+//
+//  NSDate+Extensions.m
+//  ezClocker
+//
+//  Created by Kenneth Lewis on 12/14/15.
+//  Copyright © 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "NSDate+Extensions.h"
+#import "NSString+Extensions.h"
+
+@implementation NSDate (NSDateExtensions)
+
+static NSLocale* __usLocale = nil;
+
++ (NSDate*)toDate:(NSString*)str withFormat:(NSString*)dateFormat withTimeZone:(NSTimeZone*)timeZone {
+    if ([NSString isNilOrEmpty:dateFormat])
+        return nil;
+    NSString* test = [NSString trim:str];
+    if ([NSString isNilOrEmpty:test])
+        return nil;
+
+    NSDateFormatter *inFormat = nil;
+    @try {
+        if (nil == __usLocale) {
+            __usLocale = [[NSLocale alloc] initWithLocaleIdentifier:@"en_US"];
+        }
+        inFormat = [[NSDateFormatter alloc] init];
+        [inFormat setLocale:__usLocale];
+        [inFormat setDateFormat:dateFormat];
+        if (nil != timeZone) {
+            // Get the date by the timeZone passed in
+            [inFormat setTimeZone:timeZone];
+            NSDate* parsed = [inFormat dateFromString:test];
+            return parsed;
+        } else { // else use default timezone
+            NSDate* parsed = [inFormat dateFromString:test];
+            return parsed;
+        }
+    }
+    @catch(NSException* ex) {
+#ifndef RELEASE
+        NSLog(@"WARNING: NSDate.toDate:withFormat: - error with date to string. name:%@ reason:%@", ex.name, ex.reason);
+#endif
+    }
+    return nil;
+}
+
++ (NSDate*)fromUTCDateTime:(NSString*)utcStr {
+    NSDate* result = [NSDate fromUTCDateTime:utcStr timeZone:[NSTimeZone timeZoneWithName:kUTCTimeZone]];
+    return result;
+}
+
++ (NSDate*)fromUTCDateTime:(NSString*)utcStr timeZone:(NSTimeZone*)timeZone {
+    if ([NSString isNilOrEmpty:utcStr]) {
+        return nil;
+    }
+    NSString* test = [NSString trim:utcStr];
+    if ([NSString isNilOrEmpty:test]) {
+        return nil;
+    }
+    test = [test stringByReplacingOccurrencesOfString:@"Z" withString:@"+0000"];
+    NSDate* result = [NSDate toDate:test withFormat:kDateTimeUTCFormatZ withTimeZone:timeZone];
+    return result;
+}
+
++ (NSString*)toString:(NSDate*)date withFormat:(NSString*)dateFormat withTimeZone:(NSTimeZone*)timeZone {
+    if (nil == date)
+        return @"";
+    NSString* test = [NSString trim:dateFormat];
+    if ([NSString isNilOrEmpty:test])
+        return @"";
+
+    NSDateFormatter* format = nil;
+    NSString* dateStr;
+    @try {
+        if (nil == __usLocale) {
+            __usLocale = [[NSLocale alloc] initWithLocaleIdentifier:@"en_US"];
+        }
+        format = [[NSDateFormatter alloc] init];
+        [format setDateFormat:dateFormat];
+        [format setLocale:__usLocale];
+
+        // use timezone if passed in
+        if (nil != timeZone) {
+            [format setTimeZone:timeZone];
+            dateStr = [format stringFromDate:date];
+        } else { // else use default
+            dateStr = [format stringFromDate:date];
+        }
+        return dateStr;
+    }
+    @catch(NSException* ex) {
+#ifndef RELEASE
+        NSLog(@"WARNING: NSDate.toString:withFormat: - error with date to string. name:%@ reason:%@", ex.name, ex.reason);
+#endif
+    }
+    return @"";
+}
+
++ (NSString*)toString:(NSDate*)date withFormat:(NSString*)dateFormat {
+    NSString* result = [NSDate toString:date withFormat:dateFormat withTimeZone:nil];
+    return result;
+}
+
++ (NSString*)toDefaultDateString:(NSDate*)date {
+    NSString* result = [NSDate toString:date withFormat:kDefaultDateFormat];
+    return result;
+}
+
+- (NSString*)toDefaultDateString {
+    NSString* result = [NSDate toDefaultDateString:self];
+    return result;
+}
+
++ (NSString*)toDefaultTimeString:(NSDate*)date {
+    NSString* result = [NSDate toString:date withFormat:kDefaultTimeFormat];
+    return result;
+}
+
+- (NSString*)toDefaultTimeString {
+    NSString* result = [NSDate toDefaultTimeString:self];
+    return result;
+}
+
++ (NSString*)toLongDateTimeString:(NSDate*)date {
+    NSString* result = [NSDate toString:date withFormat:kLongDateTimeFormat];
+    return result;
+}
+
+- (NSString*)toLongDateTimeString {
+    NSString* result = [NSDate toLongDateTimeString:self];
+    return result;
+}
+
++ (NSString*)toUTCDateTimeString:(NSDate *)date {
+    NSString* result = [NSDate toString:date withFormat:kDateTimeUTCFormatZ withTimeZone:[NSTimeZone timeZoneWithName:kUTCTimeZone]];
+    return result;
+}
+
+- (NSString*)toUTCDateTimeString {
+    NSString* result = [NSDate toUTCDateTimeString:self];
+    return result;
+}
+
+- (NSString*)toUTCDateTimeStringForURL {
+    NSString* result = [NSDate toUTCDateTimeString:self];
+    result  = [result stringByReplacingOccurrencesOfString:@"+0000" withString:@"Z"];
+    result  = [result stringByReplacingOccurrencesOfString:@"-0000" withString:@"Z"];
+
+    //for some reason once in a while we get p.m. in the string which casues all sort of errors so take it out
+    result = [result stringByReplacingOccurrencesOfString:@" p.m." withString:@""];
+    result = [result stringByReplacingOccurrencesOfString:@" p. m." withString:@""];
+    result = [result stringByReplacingOccurrencesOfString:@" a.m." withString:@""];
+    return result;
+}
+
+- (NSString*)toEEEMMddFormat {
+    if (nil == self) {
+        return @"";
+    }
+    return [NSDate toString:self withFormat:kEEEMMddFormat];
+}
+
++ (BOOL)isNilOrNull:(NSDate *)date {
+    BOOL bResult = (nil == date || (date == (NSDate*)[NSNull null]));
+    return bResult;
+}
+
++ (BOOL)isEquals:(NSDate*)src dest:(NSDate*)aDest {
+    if (nil == src && nil == aDest) {
+        return TRUE;
+    }
+    return (nil != src && nil != aDest && [src isEqualToDate:aDest]);
+}
+
+@end

@@ -1,0 +1,45 @@
+//
+// Prefix header for all source files of the 'ezClocker' target in the 'ezClocker' project
+//
+
+#import <Availability.h> 
+
+#ifndef __IPHONE_5_0
+#warning "This project uses features only available in iOS SDK 5.0 and later."
+#endif
+
+#define RELEASE // remove all NSLog's - the ones I put in Raya you will have to wrap all your NSLog's with #ifndef RELEASE in order to remove them for security reasons I recommend it
+
+#ifdef __OBJC__
+    #import <UIKit/UIKit.h>
+    #import <Foundation/Foundation.h>
+#endif
+
+#define EMPLOYER_SIGNUP_URL @"mobile/public/m.employerSignup.html?source=iphone"
+#define LEARN_MORE_URL @"mobile/public/m.info.html?source=iphone"
+
+//we use different mixpanel projects for personal vs. business
+#ifdef PERSONAL_VERSION
+#define MIXPANEL_TOKEN @"fb8688c4e8c05e160d99dfce903ae82f"
+#else
+#define MIXPANEL_TOKEN @"c3f6765f99778eaaf8eaf21b07f70c27"
+#endif
+
+#define DISABLE_OFFLINE_MODE
+#define ENABLE_PUSH_NOTIFICATION
+
+#ifdef DEBUG
+    //Dev
+    #define SERVER_URL @"http://76.187.85.101/"
+    #define SERVER_URL_SUBSCRIPTION @"http://76.187.85.101/apple/validatereceipt"
+    #define DEV_TOKEN @"36c5592b-68fb-45b9-bf86-0ae1083c3ce2"
+
+
+
+#else
+    // Prod
+    #define SERVER_URL @"https://ezclocker.com/"
+    #define SERVER_URL_SUBSCRIPTION @"https://ezclocker.com/apple/validatereceipt"
+    #define DEV_TOKEN @"5464925b-08d1-4787-9138-3129c9ce6381"
+
+#endif

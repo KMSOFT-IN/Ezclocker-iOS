@@ -1,0 +1,1 @@
+../../../Amplitude/Sources/EventExplorer/AMPEventExplorer.h

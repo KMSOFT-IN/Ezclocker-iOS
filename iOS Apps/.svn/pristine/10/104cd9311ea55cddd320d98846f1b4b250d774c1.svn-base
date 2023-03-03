@@ -1,0 +1,53 @@
+//
+//  CommonLib.h
+//  TCS Mobile
+//
+//  Created by Raya Khashab on 7/21/12.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+
+#import <UIKit/UIKit.h>
+
+typedef enum {
+	ClockModeIn = 0,
+	ClockModeOut = 1,
+} ClockMode;
+
+#define UIColorFromRGB(rgbValue) [UIColor colorWithRed:((float)((rgbValue & 0xFF0000) >> 16))/255.0 green:((float)((rgbValue & 0xFF00) >> 8))/255.0 blue:((float)(rgbValue & 0xFF))/255.0 alpha:1.0]
+
+
+#define SERVICE_UNAVAILABLE_ERROR 503
+#define WEB_SERVICE_OUT_OF_RANGE_ERROR 6
+#define WEB_SERVICE_ACCOUNT_EXIST_ERROR 8
+
+#define DISABLE_LOCATION_REMINDER_DIALOG_KEY @"DISABLE_LOCATION_REMINDER_DIALOG_KEY"
+#define ALERT_DELETE_ACTION 1
+
+#define MAX_TIMES_APP_LAUNCHED 10
+
+extern NSString const *PASSCODE_SYMBOL;
+
+extern int const BLUE_TOOLBAR_COLOR;
+
+extern int const GRAY_BACKGROUND_COLOR;
+
+extern int const GRAY_BACKGROUND_DARK_COLOR;
+
+extern int const GREEN_CLOCKEDIN_COLOR;
+
+extern int const ORANGE_COLOR;
+
+extern int const BABY_BLUE_COLOR;
+
+
+@interface CommonLib : NSObject
+
++(BOOL)isProduction;
+
++(BOOL)DoWeHaveNetworkConnection;
+
++ (BOOL)validateEmail:(NSString *)emailStr;
+
+
+@end

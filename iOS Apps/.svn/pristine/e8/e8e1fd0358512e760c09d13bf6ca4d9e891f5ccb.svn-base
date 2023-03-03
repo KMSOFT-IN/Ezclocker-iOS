@@ -1,0 +1,17 @@
+//
+//  UIViewControllerEx.h
+//  ezClocker
+//
+//  Created by Kenneth Lewis on 6/14/16.
+//  Copyright © 2016 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import "MBProgressHUD.h"
+#import "ISpinner.h"
+
+@interface UIViewControllerEx : UIViewController <ISpinner>
+
+ISPINNER_HEADER_DECLARATION()
+
+@end

@@ -1,0 +1,176 @@
+//
+//  CheckClockStatusWebService.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 11/6/15.
+//  Copyright © 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <Foundation/Foundation.h>
+#import "user.h"
+#import "CheckClockStatusWebService.h"
+#import "CommonLib.h"
+#import "MetricsLogWebService.h"
+#import "NSDictionary+Extensions.h"
+
+@implementation CheckClockStatusWebService
+
+-(void) checkClockStatus: (NSNumber*) employeeId{
+    UserClass *user = [UserClass getInstance];
+    UIAlertView *alert;
+    NSTimeZone *timeZone = [NSTimeZone localTimeZone];
+    NSString *timeZoneId = timeZone.name;
+    
+    NSString *employeeIDStr = [employeeId stringValue];
+  //  NSString *httpPostString = [NSString stringWithFormat:@"%@api/v1/timeentry/active/%@?timezone=%@&source=%@", SERVER_URL, employeeIDStr, timeZoneId, @"iPhone"];
+    NSString *httpPostString = [NSString stringWithFormat:@"%@api/v1/account/state/employee/%@?timezone=%@", SERVER_URL, employeeIDStr, timeZoneId];
+
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    NSString *tmpEmployerID = [user.employerID stringValue];
+    NSString *tmpAuthToken = user.authToken;
+    
+    [urlRequest setHTTPMethod:@"GET"];
+    [urlRequest setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [urlRequest setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    [urlRequest setValue:tmpEmployerID forHTTPHeaderField:@"x-ezclocker-employerId"];
+    [urlRequest setValue:tmpAuthToken forHTTPHeaderField:@"x-ezclocker-authToken"];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    if (connection)
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = YES;
+        else {
+            alert = [[UIAlertView alloc] initWithTitle:nil message:@"Connection to the server failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+        }
+    
+}
+-(void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response
+{
+    if ([response isKindOfClass: [NSHTTPURLResponse class]]) {
+        int statusCode = (int)[(NSHTTPURLResponse*) response statusCode];
+        if (statusCode == SERVICE_UNAVAILABLE_ERROR){
+            //            [self stopSpinner];
+            //           [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+            
+            //error 503 is when tomcat is down
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+            [self.delegate checkClockStatusServiceCallDidFinish:self timeEntryRec:nil ErrorCode:3];
+        }
+    }
+    
+    
+    data = [[NSMutableData alloc] init];
+}
+-(void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)dataIn
+{
+    [data appendData:dataIn];
+}
+
+-(void)connectionDidFinishLoading:(NSURLConnection *)connection
+{
+    UIAlertView *alert;
+    NSError *error = nil;
+    //        UserClass *user = [UserClass getInstance];
+    NSDictionary *results = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
+    
+    
+    NSString *resultMessage = [results valueForKey:@"message"];
+    int errorValue = [[results valueForKey:@"errorCode"] intValue];
+    
+       //if message is null or <> Success then the call failed
+    if ((![resultMessage isEqualToString:@"false"]) && (![resultMessage isEqualToString:@"true"]))
+    {
+        
+        if (([resultMessage isEqual:[NSNull null]]) || (![resultMessage isEqualToString:@"Success"])){
+            if ([resultMessage isEqual:[NSNull null]])
+            {
+ //              alert = [[UIAlertView alloc] initWithTitle:nil message:@"Call to Server Failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+//                [alert show];
+            }
+            
+            else{
+                [MetricsLogWebService LogException: [NSString stringWithFormat:@"Error from CheckClockStatusWebService.m JSON Parsing Error= %@ resultMessage= %@", error.localizedDescription, resultMessage]];
+                if (resultMessage.length > 0)
+                {
+                    alert = [[UIAlertView alloc] initWithTitle:nil message:resultMessage delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+                    [alert show];
+                }
+                
+            }
+            //pass back to the call back that there was an error
+            errorValue = 3;
+            [self.delegate checkClockStatusServiceCallDidFinish:self timeEntryRec:nil ErrorCode:errorValue];
+
+        }
+    }
+    else{
+        NSDictionary *timeEntryRec = [results valueForKey:@"timeEntry"];
+        if ([NSDictionary isNilOrNull:timeEntryRec]) {
+            timeEntryRec = nil;
+            //Should we set this to nil?
+            //user.activeTimeEntryId = nil;
+        }
+        
+        [self.delegate checkClockStatusServiceCallDidFinish:self timeEntryRec:timeEntryRec ErrorCode:errorValue];
+    }
+    
+/*
+            NSDictionary *timeEntryRec = [results valueForKey:@"timeEntry"];
+            if ([timeEntryRec isEqual:[NSNull null]])
+            
+//            if (timeEntryRec == nil)
+            {
+                clockTime = @"";
+            }
+            else
+            {
+                clockTime = [NSString stringWithFormat: @"%@",[timeEntryRec valueForKey:@"clockInIso8601"]];
+            
+                clockTime  = [clockTime stringByReplacingOccurrencesOfString:@"Z" withString:@"+0000"];
+                formatterISO8601DateTime = [[NSDateFormatter alloc] init];
+                [formatterISO8601DateTime setDateFormat:@"yyyy-MM-dd'T'HH:mm:ssZ"];
+                formatterDateTime12hr = [[NSDateFormatter alloc] init];
+                 [formatterDateTime12hr setDateFormat:@"MM/dd/yyyy h:mm:ss a"];
+                
+                //set time zones
+                [formatterISO8601DateTime setTimeZone:[NSTimeZone localTimeZone]];
+                [formatterDateTime12hr setTimeZone:[NSTimeZone localTimeZone]];
+
+            
+                NSDate *DateValue = [formatterISO8601DateTime dateFromString:clockTime];
+                clockTime = [formatterDateTime12hr stringFromDate:DateValue];
+                
+                timeEntryId = [timeEntryRec valueForKey:@"id"];
+                
+                notes = [timeEntryRec valueForKey:@"notes"];
+            }
+
+        }
+ 
+    
+    [self.delegate checkClockStatusServiceCallDidFinish:self ErrorCode:errorValue ClockTime: clockTime TimeEntryId: timeEntryId Notes: notes];
+ */
+}
+
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error
+{
+    // release the connection, and the data object
+    // receivedData is declared as a method instance elsewhere
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    //    [self stopSpinner];
+    
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+    
+    [alert show];
+    
+    connection = nil;
+    data = nil;
+    //call the callback so we can stop the spinner
+    [self.delegate checkClockStatusServiceCallDidFinish:self timeEntryRec:nil ErrorCode:3];
+    
+}
+
+@end

@@ -1,0 +1,441 @@
+//
+//  AddEmployeeViewController.m
+//  TCS Mobile
+//
+//  Created by Raya Khashab on 1/19/13.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "AddEmployeeViewController.h"
+#import "user.h"
+#import "CommonLib.h"
+#import "MetricsLogWebService.h"
+
+@interface AddEmployeeViewController ()
+
+@end
+
+@implementation AddEmployeeViewController
+@synthesize emailTextField;
+@synthesize nameTextField;
+@synthesize spinner;
+@synthesize mainViewController;
+@synthesize InviteBtn;
+@synthesize delegate;
+@synthesize InviteSentLabel;
+@synthesize scrollView;
+
+
+- (id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
+{
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    if (self) {
+        // Custom initialization
+        NSString *imagePath = [[NSBundle mainBundle] pathForResource:@"checkbox_new" ofType:@"png"];
+        checkboxImage = [UIImage imageWithContentsOfFile:imagePath];
+        imagePath = [[NSBundle mainBundle] pathForResource:@"uncheck_new" ofType:@"png"];
+        uncheckboxImage = [UIImage imageWithContentsOfFile:imagePath];
+   }
+    return self;
+}
+
+- (void)viewWillAppear:(BOOL)animated
+{
+	[super viewWillAppear: animated];
+    //this will help us figure out which service to call
+    EmployeeAdded = NO;
+    EmployeeInvited = NO;
+    boxChecked = TRUE;
+    mainViewController.backgroundColor = UIColorFromRGB(GRAY_BACKGROUND_COLOR);
+    scrollView.backgroundColor = UIColorFromRGB(GRAY_BACKGROUND_COLOR);
+    [scrollView setScrollEnabled:YES];
+    [scrollView setContentSize:CGSizeMake(320, 650)];
+    scrollView.delaysContentTouches = NO;
+
+    NSDictionary *navbarTitleTextAttributes = [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [UIColor whiteColor],
+                                               NSForegroundColorAttributeName,
+                                               nil];
+    [self.navigationController.navigationBar setTitleTextAttributes:navbarTitleTextAttributes];
+
+
+}
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    // Do any additional setup after loading the view from its nib.
+    InviteSentLabel.hidden = YES;
+    nameTextField.delegate = self;
+    [nameTextField setReturnKeyType:UIReturnKeyDone];
+    emailTextField.delegate = self;
+    [emailTextField setReturnKeyType:UIReturnKeyDone];
+    //ios 7
+    self.navigationController.navigationBar.translucent = NO;
+
+    
+
+}
+
+- (void)viewDidUnload
+{
+    [self setEmailTextField:nil];
+    [self setNameTextField:nil];
+    [self setMainViewController:nil];
+    [self setInviteBtn:nil];
+    [self setInviteSentLabel:nil];
+    [super viewDidUnload];
+    // Release any retained subviews of the main view.
+    // e.g. self.myOutlet = nil;
+}
+
+- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
+{
+    return (interfaceOrientation == UIInterfaceOrientationPortrait);
+}
+
+-(void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response
+{
+    if ([response isKindOfClass: [NSHTTPURLResponse class]]) {
+        int statusCode = [(NSHTTPURLResponse*) response statusCode];
+        if (statusCode == SERVICE_UNAVAILABLE_ERROR){
+            [self stopSpinner];
+            [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+            
+            //error 503 is when tomcat is down
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+        }
+    }
+    
+    
+    data = [[NSMutableData alloc] init];
+}
+-(void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)dataIn
+{
+    [data appendData:dataIn];
+}
+
+-(void)connectionDidFinishLoading:(NSURLConnection *)connection
+{
+    [self stopSpinner];
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    
+    UIAlertView *alert;
+    NSError *error = nil;
+    NSDictionary *results = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
+    NSString* JSONStr = [[NSString alloc] initWithData:data
+                                              encoding:NSUTF8StringEncoding];
+    NSLog(@"JSONStr result is %@", JSONStr);
+
+    NSString *resultMessage = [results valueForKey:@"message"];
+    int errorValue = [[results valueForKey:@"errorCode"] intValue];
+
+    if (([resultMessage isEqual:[NSNull null]]) || (![resultMessage isEqualToString:@"Success"]))
+        {
+            //if the account already exists show the message that the service sends back else give them a generic message
+            if (errorValue == WEB_SERVICE_ACCOUNT_EXIST_ERROR){
+                alert = [[UIAlertView alloc] initWithTitle:nil message:resultMessage delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+                EmployeeAdded = NO;
+            }
+            else{
+                [MetricsLogWebService LogException: [NSString stringWithFormat:@"Error from AddEmployeeViewController JSON Parsing Error= %@ resultMessage= %@", error.localizedDescription, resultMessage]];
+                
+                alert = [[UIAlertView alloc] initWithTitle:nil message:@"Error Creating Account!" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            }
+            [alert show];
+        }
+    else{
+        //show the text that an invite was send
+        InviteBtn.enabled = NO;
+        InviteBtn.alpha = 0.5;
+        InviteSentLabel.hidden = NO;
+    }
+    //if we pressed the save button then dismiss the controller
+    if (EmployeeAdded){
+        [self.delegate addEmployeeViewControllerDidFinish:self.parentViewController];
+    }
+
+    /*
+    else {
+        UserClass *user = [UserClass getInstance];
+        //figure out did we call the Add Employer service call or get Auth Token call
+        if (!EmployeeAdded){
+            EmployeeAdded = YES;
+            NSDictionary *curEmployer = [results valueForKey:@"employee"];
+//            user.userID  = [curEmployer valueForKey:@"id"];
+            
+            //call the invite service
+            
+            EmployeeInvited = YES;
+            [self callEmployeeInviteWebService:self.emailTextField.text];
+        }
+        else {
+            //only invite the employee if the box is checked and we haven't invited them yet
+            if ((!EmployeeInvited) && (boxChecked)){
+                EmployeeInvited = YES;
+                [self callEmployeeInviteWebService:self.emailTextField.text];
+            }
+            //else we are done
+            else {
+                [self.delegate addEmployeeViewControllerDidFinish:self];
+            }
+
+            NSArray *AuthTokens = [results valueForKey:@"activeAuthTokens"];
+            //if empty array of tokens then the login was incorrect like wrong password
+            if ([AuthTokens count] == 0)
+            {
+                [self showLoginFailureError];
+            }
+            
+            for (NSDictionary *curAuthToken in AuthTokens){
+                
+                NSString *tmp   = [curAuthToken valueForKey:@"authToken"];
+                user.authToken  = tmp;
+                
+                [[NSUserDefaults standardUserDefaults] setObject:tmp forKey:@"authToken"];
+                [[NSUserDefaults standardUserDefaults] synchronize]; //write out the data
+            }
+//            AppDelegate *mainDelegate = (AppDelegate*)[[UIApplication sharedApplication]delegate];
+//            [mainDelegate RegisterEmployerDidPass];
+            
+        }
+   
+    }
+*/
+    
+}
+
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error
+{
+    // release the connection, and the data object
+    // receivedData is declared as a method instance elsewhere
+    [self stopSpinner];
+
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+    
+    [alert show];
+    
+    connection = nil;
+    data = nil;
+}
+
+-(void) showLoginFailureError{
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Login is incorrect!. Please try again." delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+    [alert show];   
+}
+
+
+
+-(void) callAddEmployeeWebService: (NSString*) userName UserEmail: (NSString *) userEmail{
+    UserClass *user = [UserClass getInstance];
+    
+    [self startSpinner ];
+    
+    UIAlertView *alert;
+    NSString *httpPostString;
+    NSString *request_body;
+
+    
+    httpPostString = [NSString stringWithFormat:@"%@employee/add/%@", SERVER_URL, user.employerID];
+   
+    request_body = [NSString
+                    stringWithFormat:@"authToken=%@&employeeName=%@&emailAddress=%@",
+                    [user.authToken        stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [userName     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [userEmail     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]];   
+
+    NSLog(@"JSON I sent:%@", request_body);
+
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    
+    //set HTTP Method
+    [urlRequest setHTTPMethod:@"POST"];
+    
+    //set request body into HTTPBody.
+    [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    if (connection)
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = YES;
+    else {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Connection to the server failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+        
+    }
+    
+    
+}
+
+-(void) callEmployeeInviteWebService: (NSString*) userName userEmail:(NSString*) userEmail{
+    UserClass *user = [UserClass getInstance];
+    
+    UIAlertView *alert;
+    NSString *httpPostString;
+    NSString *request_body;
+    
+    httpPostString = [NSString stringWithFormat:@"%@employee/invite/%@", SERVER_URL, user.employerID];
+    
+    request_body = [NSString 
+                    stringWithFormat:@"authToken=%@&name=%@&emailAddress=%@",
+                    [user.authToken        stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [userName     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [userEmail     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding
+                     ]];   
+    
+    
+    NSLog(@"JSON I sent:%@", request_body);
+
+    
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    
+    //set HTTP Method
+    [urlRequest setHTTPMethod:@"POST"];
+    
+    //set request body into HTTPBody.
+    [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+  
+    if (connection){
+ //       InviteBtn.enabled = NO;
+ //       InviteBtn.alpha = 0.5;
+ //       InviteSentLabel.hidden = NO;
+
+        
+    }
+    else {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Connection to the server failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+        
+    }
+    
+    
+}
+
+
+-(void)removeKeyboard{
+    [nameTextField resignFirstResponder];
+    [emailTextField resignFirstResponder];
+}
+// Called when the UIKeyboardWillHideNotification is sent
+- (void)keyboardWillBeHidden:(NSNotification*)aNotification
+{
+    UIEdgeInsets contentInsets = UIEdgeInsetsZero;
+    scrollView.contentInset = contentInsets;
+    scrollView.scrollIndicatorInsets = contentInsets;
+}
+
+
+- (IBAction)doInvite:(id)sender {
+    if ([nameTextField.text length] == 0) {
+        UIAlertView  *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Please enter Employee Name" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+
+    }
+    else
+        if ([emailTextField.text length] == 0) {
+            UIAlertView  *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Please enter Employee Email" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+            
+        }
+        else{
+            EmployeeInvited = YES;
+            [self removeKeyboard];
+            [self callEmployeeInviteWebService:self.nameTextField.text userEmail:self.emailTextField.text];
+        }
+}
+
+/*- (IBAction)doAddEmployee:(id)sender {
+    [self startSpinner ];
+    [self callAddEmployeeWebService:self.nameTextField.text UserEmail:self.emailTextField.text Password: self.passwordTextField.text];
+
+}
+ */
+
+- (IBAction)doCancelAddEmployee:(id)sender {
+    [self.delegate addEmployeeViewControllerDidFinish:self.parentViewController];
+}
+
+- (IBAction)doSaveAddEmployee:(id)sender {
+//    [self startSpinner ];
+    //if employee has been already invited then they've been added so skip this part and just return to prev controller
+    if (!EmployeeInvited)
+    {
+        if ([nameTextField.text length] == 0) {
+            UIAlertView  *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Please enter Employee Name" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+            
+        }
+        else
+            if ([emailTextField.text length] == 0) {
+                UIAlertView  *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Please enter Employee Email" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+                [alert show];
+                
+            }
+            else{
+                    EmployeeAdded = YES;
+                    [self removeKeyboard];
+                    [self callAddEmployeeWebService:self.nameTextField.text UserEmail:self.emailTextField.text];
+                }
+    }
+    else
+    {
+        [self.delegate addEmployeeViewControllerDidFinish:self.parentViewController];
+        
+    }
+}
+
+- (IBAction)nameEditingDidBegin:(id)sender {
+
+}
+
+/*- (IBAction)doSave:(id)sender {
+    if (!EmployeeAdded){
+        [self callAddEmployeeWebService:self.nameTextField.text UserEmail:self.emailTextField.text Password: self.passwordTextField.text];        
+    }
+    else {
+        UIAlertView  *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Employee has already been added" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+        [self.delegate addEmployeeViewControllerDidFinish:self];
+
+    }
+
+}
+ */
+-(void)touchesBegan:(NSSet*)trigger withEvent:(UIEvent*)event{
+ //   [emailTextField resignFirstResponder];
+ //   [nameTextField resignFirstResponder];
+ 
+}
+
+
+- (IBAction)doEmailEditingDidBegin:(id)sender {
+}
+
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    [self removeKeyboard];
+    return YES;
+}
+
+-(void) startSpinner{
+    if (!self.spinner)
+    {
+        self.spinner = [[MBProgressHUD alloc] initWithView:self.view];
+    }
+    self.spinner.labelText = @"Adding Employee..";
+    [self.view addSubview:self.spinner];
+    [self.spinner show:YES];
+}
+
+-(void) stopSpinner{
+    [self.spinner hide:YES];
+}
+
+@end

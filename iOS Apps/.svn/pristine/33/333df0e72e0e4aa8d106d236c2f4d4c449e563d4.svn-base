@@ -1,0 +1,86 @@
+//
+//  MetricsLogWebService.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 3/3/14.
+//  Copyright (c) 2014 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "MetricsLogWebService.h"
+
+#import "user.h"
+#import "CommonLib.h"
+
+@implementation MetricsLogWebService
+
++(void) LogException:(NSString*) message{
+    UserClass *user = [UserClass getInstance];
+    NSString *httpPostString;
+    NSString *request_body;
+    httpPostString = [NSString stringWithFormat:@"%@metric/write", SERVER_URL];
+    //Implement request_body for send request here authToken and clock DateTime set into the body.
+#ifdef PERSONAL_VERSION
+    NSString *mKeyEvent = @"EXCEPTION.IPHONE.PERSONAL";
+#else
+    NSString *mKeyEvent = @"EXCEPTION.IPHONE.BUSINESS";
+#endif
+    NSString *mDetailEvent = message;
+    NSString *instance = @"Mobile";
+    request_body = [NSString
+                    stringWithFormat:@"developerToken=%@&event=%@&details=%@&userName=%@&instance=%@&source=%@",
+                    [DEV_TOKEN   stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [mKeyEvent  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [mDetailEvent  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [user.userEmail  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [instance  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [@"iPhone" stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]
+                    ];
+    
+    
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    //set HTTP Method
+    [urlRequest setHTTPMethod:@"POST"];
+    
+    
+    //set request body into HTTPBody.
+    [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    //We don't care if the request fails or not in this situation so no checking after this line
+    
+}
+
+-(void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response
+{
+    if ([response isKindOfClass: [NSHTTPURLResponse class]]) {
+        int statusCode = [(NSHTTPURLResponse*) response statusCode];
+        if (statusCode == SERVICE_UNAVAILABLE_ERROR){
+            [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+            
+            //error 503 is when tomcat is down
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+        }
+    }
+    
+    
+    data = [[NSMutableData alloc] init];
+}
+-(void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)dataIn
+{
+    [data appendData:dataIn];
+}
+-(void)connectionDidFinishLoading:(NSURLConnection *)connection
+{
+    NSError *error = nil;
+    NSDictionary *results = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
+        
+        
+    NSString *resultMessage = [results valueForKey:@"message"];
+    NSLog(@"error= %@", resultMessage);
+
+}
+
+@end

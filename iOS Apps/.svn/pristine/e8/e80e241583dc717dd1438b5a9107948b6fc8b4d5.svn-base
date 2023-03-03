@@ -1,0 +1,115 @@
+//
+//  SignUpChoiceViewController.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 10/22/13.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "SignUpChoiceViewController.h"
+#import "EmployerSignUpViewController.h"
+
+@interface SignUpChoiceViewController ()
+
+@end
+
+@implementation SignUpChoiceViewController
+
+-(id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
+{
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    if (self){
+        self.title = NSLocalizedString(@"Account Type", @"Account Type");
+    }
+    
+    return self;
+}
+
+- (id)initWithStyle:(UITableViewStyle)style
+{
+    self = [super initWithStyle:style];
+    if (self) {
+        // Custom initialization
+    }
+
+    return self;
+}
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+
+    // Uncomment the following line to preserve selection between presentations.
+    // self.clearsSelectionOnViewWillAppear = NO;
+ 
+    // Uncomment the following line to display an Edit button in the navigation bar for this view controller.
+    // self.navigationItem.rightBarButtonItem = self.editButtonItem;
+}
+
+- (void)viewDidUnload
+{
+    [super viewDidUnload];
+    // Release any retained subviews of the main view.
+    // e.g. self.myOutlet = nil;
+}
+
+- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
+{
+    return (interfaceOrientation == UIInterfaceOrientationPortrait);
+}
+
+#pragma mark - Table view data source
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+{
+    // Return the number of sections.
+    return 1;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{
+    // Return the number of rows in the section.
+    return 2;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    static NSString *CellIdentifier = @"ChoiceCell";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:CellIdentifier];
+    if (cell == nil) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:CellIdentifier];
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+    }   
+    // Configure the cell...
+    if (indexPath.row == 0){
+        cell.textLabel.text = @"Employer/Owner Acccount";
+        cell.detailTextLabel.text = @"Someone who can add employees";
+    }
+    else {
+        cell.textLabel.text = @"Employee Account";
+        cell.detailTextLabel.text = @"Someone who clocks in/out";
+    }
+    return cell;
+}
+
+
+
+#pragma mark - Table view delegate
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    EmployerSignUpViewController *employerSignUpViewController;
+    // Navigation logic may go here. Create and push another view controller.
+    
+    if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPhone) 
+        employerSignUpViewController = [[EmployerSignUpViewController alloc] initWithNibName:@"EmployerSignUpViewController" bundle:nil];
+    else {
+        employerSignUpViewController = [[EmployerSignUpViewController alloc] initWithNibName:@"EmployerSignUpViewController_iPad" bundle:nil];
+    }
+     // ...
+     // Pass the selected object to the new view controller.
+     [self.navigationController pushViewController:employerSignUpViewController animated:YES];
+     
+}
+
+@end

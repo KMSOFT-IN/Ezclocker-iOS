@@ -1,0 +1,41 @@
+//
+//  EmployerScheduleViewController.h
+//  ezClocker
+//
+//  Created by Raya Khashab on 1/3/15.
+//  Copyright (c) 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import "ScheduleDetailViewController.h"
+#import "UIViewControllerEx.h"
+
+
+@interface EmployerScheduleViewController : UIViewControllerEx <UITableViewDelegate,NSURLConnectionDataDelegate>{
+    
+    NSMutableData *data;
+    NSDate *startingDate;
+    UIDatePicker *theDatePicker;
+    NSDate *todayDate;
+    NSDateFormatter *formatterISO8601DateTime, *formatterISO8601Date;
+    bool showErrorMessage;
+    NSMutableArray *scheduleList;
+    UIButton *selectDateButton;
+    NSDateFormatter *formatterDate, *formatterLongDate, *formatterTime12;
+    UIView* pickerViewDate;
+    UIToolbar* pickerToolbar;
+    UIBarButtonItem *addButton;
+    UINavigationController *scheduleNavigationController;
+}
+- (IBAction)doNextDateClick:(id)sender;
+- (IBAction)doPrevDateClick:(id)sender;
+- (IBAction)revealMenu:(id)sender;
+@property (weak, nonatomic) IBOutlet UIView *selectedDateView;
+- (IBAction)doChangeDateBtnClick:(id)sender;
+@property (weak, nonatomic) IBOutlet UITableView *scheduleTable;
+@property (strong, nonatomic) ScheduleDetailViewController *scheduleDetailViewController;
+
+
+
+
+@end

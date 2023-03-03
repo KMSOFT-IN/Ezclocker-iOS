@@ -1,0 +1,28 @@
+//
+//  TimeEntryHistoryViewController.h
+//  ezClocker
+//
+//  Created by Raya Khashab on 2/27/15.
+//  Copyright (c) 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import "MBProgressHUD.h"
+
+@class TimeEntryHistoryViewController;
+
+@protocol historyTimeEntryViewControllerDelegate
+- (void)historyTimeEntryViewControllerDidFinish:(TimeEntryHistoryViewController *)controller;
+@end
+
+@interface TimeEntryHistoryViewController : UIViewController<UITableViewDelegate, NSURLConnectionDataDelegate>{
+
+    NSMutableData *data;
+    MBProgressHUD *spinner;
+
+}
+
+@property (assign, nonatomic) IBOutlet id <historyTimeEntryViewControllerDelegate> delegate;
+@property (weak, nonatomic) IBOutlet UITableView *historyTable;
+
+@end

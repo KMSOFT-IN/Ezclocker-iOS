@@ -1,0 +1,992 @@
+//
+//  EmployeeClockViewController.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 10/22/13.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "EmployeeClockViewController.h"
+
+//#import "SettingsViewController.h"
+
+//#import "PasscodeViewController.h"
+
+//#import "LoginViewController.h"
+
+#import "CommonLib.h"
+
+#import <QuartzCore/QuartzCore.h>
+
+#import "user.h"
+
+#import "ECSlidingViewController.h"
+
+#import "MenuViewController.h"
+
+#import "Mixpanel.h"
+
+#import "CommonLib.h"
+#import "MetricsLogWebService.h"
+
+@interface EmployeeClockViewController ()
+
+@property (nonatomic, assign) bool bOverrideLocationCheck;
+@property (nonatomic, assign) ClockMode lastClockMode;
+@property (nonatomic, assign) NSDate *lastClockTime;
+@end
+
+@implementation EmployeeClockViewController
+//@synthesize lblDebug;
+@synthesize clockInBtn;
+@synthesize clockOutBtn;
+@synthesize currentTimeLabel;
+@synthesize TimeClockTableView;
+//@synthesize myLocationManager;
+@synthesize spinner;
+@synthesize bOverrideLocationCheck, lastClockMode, lastClockTime;
+@synthesize bannerView= _bannerView;
+@synthesize admobBannerView = _admobBannerView;
+
+
+
+- (id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
+{
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    return self;
+}
+
+- (id)initWithCoder:(NSCoder *)aDecoder
+{
+    self = [super initWithCoder:aDecoder];
+    if (self) {
+        self.tabBarItem.image = [UIImage imageNamed:@"clock"];
+        [[NSNotificationCenter defaultCenter] addObserver: self
+                                                 selector: @selector(enteredBackground:)
+                                                     name: @"didEnterBackground"
+                                                   object: nil];
+        [[NSNotificationCenter defaultCenter] addObserver: self
+                                                 selector: @selector(enteredForeground:)
+                                                     name: @"didEnterForeground"
+                                                   object: nil];
+        self.title = NSLocalizedString(@"Clock in/out", @"Clock in/out");
+        self.tabBarItem.image = [UIImage imageNamed:@"clock"];
+
+        
+    }
+    formatterISO8601DateTime = [[NSDateFormatter alloc] init];
+    [formatterISO8601DateTime setDateFormat:@"yyyy-MM-dd'T'HH:mm:ssZ"];
+    formatterDateTime12hr = [[NSDateFormatter alloc] init];
+    formatterTime = [[NSDateFormatter alloc] init];
+    [formatterTime setDateFormat:@"h:mm:ss a"];
+    [formatterDateTime12hr setDateFormat:@"MM/dd/yyyy h:mm:ss a"];
+    
+    //[formatterDateTime setTimeZone:[NSTimeZone timeZoneForSecondsFromGMT:-18000]];
+    
+    //set time zones
+    [formatterISO8601DateTime setTimeZone:[NSTimeZone localTimeZone]];
+    [formatterDateTime12hr setTimeZone:[NSTimeZone localTimeZone]];
+    [formatterTime setTimeZone:[NSTimeZone localTimeZone]];
+    
+    //color the buttons
+    clockInBtn.backgroundColor = UIColorFromRGB(ORANGE_COLOR);
+    clockOutBtn.backgroundColor = UIColorFromRGB(ORANGE_COLOR);
+
+    
+    //this contains the user data like employerId
+    user = [UserClass getInstance];
+  
+    return self;
+}
+
+- (NSUInteger)supportedInterfaceOrientations{
+    return UIInterfaceOrientationMaskPortrait;
+}
+
+
+
+-(void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response
+{
+    if ([response isKindOfClass: [NSHTTPURLResponse class]]) {
+        int statusCode = [(NSHTTPURLResponse*) response statusCode];
+        if (statusCode == SERVICE_UNAVAILABLE_ERROR){
+            [self stopSpinner];
+            [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+
+            //error 503 is when tomcat is down
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+         }
+   }
+    
+
+    data = [[NSMutableData alloc] init];
+}
+-(void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)dataIn
+{
+    [data appendData:dataIn];
+}
+
+-(void)connectionDidFinishLoading:(NSURLConnection *)connection
+{
+    @try {
+//    [self.myWebView loadHTMLString:[[NSString alloc]initWithData:data encoding:NSUTF8StringEncoding] baseURL:nil];
+    UIAlertView *alert;
+    
+//    if (currentDistanceinMiles > 100)
+//    {
+//        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Error: Your Current Location is no valid" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+ //       [alert show];
+        
+  //  }
+    NSError *error = nil;
+    NSDictionary *results = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
+        
+
+    NSString *resultMessage = [results valueForKey:@"message"];
+    int errorValue = [[results valueForKey:@"errorCode"] intValue];
+        
+#ifndef PERSONAL_VERSION
+    if (errorValue == WEB_SERVICE_OUT_OF_RANGE_ERROR) {
+        //outside of clock in/out range  prompt for override
+        [self promptForOverride:resultMessage];
+        return;
+    }
+#endif
+
+    //if message is null or <> Success then the call failed
+    if (([resultMessage isEqual:[NSNull null]]) || (![resultMessage isEqualToString:@"Success"])){
+        if ([resultMessage isEqual:[NSNull null]])
+        {
+            alert = [[UIAlertView alloc] initWithTitle:nil message:@"Time Entry from Server Failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+        }
+
+        else{
+            [MetricsLogWebService LogException: [NSString stringWithFormat:@"Error from EmployeeClockViewController JSON Parsing Error= %@ resultMessage= %@", error.localizedDescription, resultMessage]];
+            if (resultMessage.length > 0)
+            {
+                alert = [[UIAlertView alloc] initWithTitle:nil message:resultMessage delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+                [alert show];
+            }
+
+        }
+        //if error code = 1 that means that person has already clocked in from the website so
+        if (errorValue  == 1){
+                [self enableButton:clockOutBtn];        
+                [self disableButton:clockInBtn];
+                user.currentClockMode = ClockModeOut;
+                strLastClockInTime = @"";
+        }
+        //if error code = 2 that means that person has already clocked out from the website so    
+        else if (errorValue  == 2){
+                [self enableButton:clockInBtn];
+                [self disableButton:clockOutBtn];        
+                user.currentClockMode = ClockModeIn;
+                strLastClockOutTime = @"";
+            
+        }
+
+        
+    }
+    else {
+        NSDictionary *timeEntry = [results valueForKey:@"timeEntry"];
+        if ([timeEntry count] != 0)
+        {
+            if (user.currentClockMode == ClockModeIn)
+            {
+                strLastClockInTime = [formatterDateTime12hr stringFromDate:lastClockInTime];                
+                strLastClockOutTime = @"";
+                user.lastClockIn = strLastClockInTime;
+                user.lastClockOut = strLastClockOutTime;
+                //log to mixpanel if we are production
+                if ([CommonLib isProduction])
+                {
+                    Mixpanel *mixpanel = [Mixpanel sharedInstance];
+                    [mixpanel track:@"Employee Clockin" properties:@{ @"email": user.userEmail}];
+                }
+
+
+             }
+            else
+            {
+                strLastClockOutTime = [formatterDateTime12hr stringFromDate:lastClockOutTime];
+                user.lastClockOut = strLastClockOutTime;
+            }
+          //[timeEntry valueForKey:@"clockInString"];
+          //[timeEntry valueForKey:@"clockOutString"];
+          [self updateUI];
+        }
+        
+    }
+    }//try
+    @finally{
+        self.bOverrideLocationCheck = NO;//reset
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+        [self stopSpinner];
+    }
+}
+
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error
+{
+    // release the connection, and the data object
+    // receivedData is declared as a method instance elsewhere
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    [self stopSpinner];
+    
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+    
+    [alert show];
+    
+    connection = nil;
+    data = nil;
+}
+
+
+- (void) awakeFromNib
+{
+    [self tick:nil];
+}
+
+-(NSDate*) getCurrentDateTime{
+    return [NSDate date];
+    //NSString *currentDateTime = [formatterDateTime stringFromDate:[NSDate date]];
+
+    //return currentDateTime;
+    
+}
+
+-(NSString*) getCurrentTime{
+    NSString *currentDateTime = [formatterTime stringFromDate:[NSDate date]];
+    return currentDateTime;
+    
+}
+
+-(void) checkClockStatus{
+    user = [UserClass getInstance];
+    UIAlertView *alert;
+    NSTimeZone *timeZone = [NSTimeZone localTimeZone];
+    NSString *timeZoneId = timeZone.name;
+
+    NSString *employeeID = [user.userID stringValue];
+    NSString *httpPostString = [NSString stringWithFormat:@"%@api/v1/timeentry/active/%@?timezone=%@&source=%@", SERVER_URL, user.userID, timeZoneId, @"iPhone"];
+    
+ //   NSString *request_body = [NSString
+ //                   stringWithFormat:@"employeeId=%@&timezone=%@&source=%@",
+ //                   [employeeID  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+ //                   [timeZoneId  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+ //                   [@"iPhone"  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]
+ //   ];
+    
+    
+    
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    NSString *tmpEmployerID = [user.employerID stringValue];
+    NSString *tmpAuthToken = user.authToken;
+    
+    [urlRequest setHTTPMethod:@"GET"];
+    [urlRequest setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [urlRequest setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    [urlRequest setValue:tmpEmployerID forHTTPHeaderField:@"x-ezclocker-employerId"];
+    [urlRequest setValue:tmpAuthToken forHTTPHeaderField:@"x-ezclocker-authToken"];
+
+    
+    //set request body into HTTPBody.
+ //   [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    if (connection)
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = YES;
+    else {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Connection to the server failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+    }
+
+
+}
+
+-(void) checkScheduledToWork{
+    user = [UserClass getInstance];
+    UIAlertView *alert;
+    NSTimeZone *timeZone = [NSTimeZone localTimeZone];
+    NSString *timeZoneId = timeZone.name;
+    
+    NSString *employeeID = [user.userID stringValue];
+    NSString *httpPostString = [NSString stringWithFormat:@"%@api/v1/employee/%@/schedules/today", SERVER_URL, employeeID];
+    
+       NSString *request_body = [NSString
+                       stringWithFormat:@"active=%@&timeZoneId=%@&source=%@",
+                       [@"true"  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                       [timeZoneId  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                       [@"iPhone"  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]
+       ];
+    
+    
+    
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    NSString *tmpEmployerID = [user.employerID stringValue];
+    NSString *tmpAuthToken = user.authToken;
+    
+    [urlRequest setHTTPMethod:@"GET"];
+    [urlRequest setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [urlRequest setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    [urlRequest setValue:tmpEmployerID forHTTPHeaderField:@"x-ezclocker-employerId"];
+    [urlRequest setValue:tmpAuthToken forHTTPHeaderField:@"x-ezclocker-authToken"];
+    
+    
+    //set request body into HTTPBody.
+       [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    if (connection)
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = YES;
+    else {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Connection to the server failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+    }
+    
+    
+}
+
+-(void) callTCSWebService:(ClockMode) clockMode dateTime:(NSDate*) currentDateTime{
+ //   NSString *currentDateTime = self.getCurrentDateTime;
+    user = [UserClass getInstance];
+    UIAlertView *alert;
+
+    NSString *httpPostString;
+    NSString *request_body;
+    [formatterISO8601DateTime setTimeZone:[NSTimeZone timeZoneWithName:@"UTC"]];
+    NSString *strCurrentDateTime = [formatterISO8601DateTime stringFromDate:currentDateTime];
+    strCurrentDateTime  = [strCurrentDateTime stringByReplacingOccurrencesOfString:@"+0000" withString:@"Z"];
+    strCurrentDateTime  = [strCurrentDateTime stringByReplacingOccurrencesOfString:@"-0000" withString:@"Z"];
+
+    NSTimeZone *timeZone = [NSTimeZone localTimeZone];
+    NSString *timeZoneId = timeZone.name;
+    NSString *source = @"IPHONE";
+    //pass the person that did the clock in/out if we don't know the name then pass the email
+    NSString *modifiedBy = user.employerName;
+    if ([modifiedBy isEqualToString :@"" ])
+        modifiedBy = user.userEmail;
+
+#ifndef PERSONAL_VERSION
+    CLLocation *loc = [LocationManager defaultLocationManager].lastKnownLocation;
+#endif
+    
+    //check if we are doing a clockIn or clockOut
+    if (clockMode == ClockModeIn)
+    {
+        httpPostString = [NSString stringWithFormat:@"%@timeEntry/clockIn/%@/%@", SERVER_URL, user.employerID, user.userID];
+#ifndef PERSONAL_VERSION
+        
+        NSString *gpsStatus = @"ACTIVE";
+        if ([CLLocationManager authorizationStatus] == kCLAuthorizationStatusDenied)
+            gpsStatus = @"DISABLED";
+        
+        request_body = [NSString
+                                  stringWithFormat:@"authToken=%@&clockInISO8601Utc=%@&timeZoneId=%@&%@&%@&%@&%@&%@&%@&%@&%@&%@&%@&source=%@",
+                                  [user.authToken   stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                                  [strCurrentDateTime  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                                  [timeZoneId  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                                  [NSString stringWithFormat:@"gpsDataStatus=%@", gpsStatus],
+                                  [NSString stringWithFormat:@"modifiedBy=%@", modifiedBy],
+                                  [NSString stringWithFormat:@"latitude=%f", loc.coordinate.latitude],
+                                  [NSString stringWithFormat:@"longitude=%f", loc.coordinate.longitude],
+                                  [NSString stringWithFormat:@"locTime=%f", [loc.timestamp timeIntervalSince1970]],
+                                  [NSString stringWithFormat:@"overrideLocationCheck=%@", (self.bOverrideLocationCheck)?@"true":@"false"],
+                                  [NSString stringWithFormat:@"speed=%f", loc.speed],
+                                  [NSString stringWithFormat:@"altitude=%f", loc.altitude],
+                                  [NSString stringWithFormat:@"accuracy=%f", loc.horizontalAccuracy],
+                                  [NSString stringWithFormat:@"bearing=%f", loc.course],
+                                  [source  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]
+                        ];
+#else
+        request_body = [NSString
+                        stringWithFormat:@"authToken=%@&clockInISO8601Utc=%@&timeZoneId=%@&source=%@",
+                        [user.authToken   stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                        [strCurrentDateTime  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                        [timeZoneId  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                        [source  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]
+                        ];
+       
+#endif
+
+
+    }
+    else {
+        httpPostString = [NSString stringWithFormat:@"%@timeEntry/clockOut/%@/%@", SERVER_URL, user.employerID, user.userID];
+        //Implement request_body for send request here authToken and clock DateTime set into the body.
+#ifndef PERSONAL_VERSION
+
+        NSString *gpsStatus = @"ACTIVE";
+        if ([CLLocationManager authorizationStatus] == kCLAuthorizationStatusDenied)
+            gpsStatus = @"DISABLED";
+
+        request_body = [NSString
+                                  stringWithFormat:@"authToken=%@&clockOutISO8601Utc=%@&timeZoneId=%@&%@&%@&%@&%@&%@&%@&%@&%@&%@&%@&source=%@",
+                                  [user.authToken        stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                                  [strCurrentDateTime        stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                                  [timeZoneId  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                                  [NSString stringWithFormat:@"gpsDataStatus=%@", gpsStatus],
+                                  [NSString stringWithFormat:@"modifiedBy=%@", modifiedBy],
+                                  [NSString stringWithFormat:@"latitude=%f", loc.coordinate.latitude],
+                                  [NSString stringWithFormat:@"longitude=%f", loc.coordinate.longitude],
+                                  [NSString stringWithFormat:@"locTime=%f", [loc.timestamp timeIntervalSince1970]],
+                                  [NSString stringWithFormat:@"overrideLocationCheck=%@", (self.bOverrideLocationCheck)?@"true":@"false"],
+                                  [NSString stringWithFormat:@"speed=%f", loc.speed],
+                                  [NSString stringWithFormat:@"altitude=%f", loc.altitude],
+                                  [NSString stringWithFormat:@"accuracy=%f", loc.horizontalAccuracy],
+                                  [NSString stringWithFormat:@"bearing=%f", loc.course],
+                                  [source  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]
+                        ];
+#else
+        request_body = [NSString
+                        stringWithFormat:@"authToken=%@&clockOutISO8601Utc=%@&timeZoneId=%@&source=%@",
+                        [user.authToken        stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                        [strCurrentDateTime        stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                        [timeZoneId  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                        [source  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]
+                        ];
+#endif
+
+    }
+
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    //set HTTP Method
+    [urlRequest setHTTPMethod:@"POST"];
+    
+    //set request body into HTTPBody.
+    [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    if (connection)
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = YES;
+    else {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Connection to the server failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+    }
+
+}
+
+
+- (void) tick:(id)sender
+{
+    NSString *time = self.getCurrentTime;
+    self.currentTimeLabel.text = time;
+     [ self performSelector: @selector(tick:)
+      withObject: nil
+      afterDelay: 1.0
+     ]; 
+}
+		
+-(void) enableButton:(UIButton*) curBtn {
+    //make sure the button is set to enabled
+    curBtn.enabled = TRUE;
+    curBtn.alpha = 1.0f;
+    [[curBtn layer] setCornerRadius:4.0f];
+
+
+  //  UIColor *blueRidgeMtns = UIColorFromRGB(0x63a8cc);
+//    self.topNavigationBar.titleTextAttributes = @{UITextAttributeTextColor : [UIColor blackColor]};
+    [[UINavigationBar appearance] setTitleTextAttributes:
+     [NSDictionary dictionaryWithObjectsAndKeys:
+      [UIColor whiteColor], UITextAttributeTextColor,
+      [UIColor clearColor], UITextAttributeTextShadowColor,
+      [UIFont fontWithName:@"Helvetica Neue-Bold" size:0.0], UITextAttributeFont, nil]];
+   
+    
+  //  [self.topNavigationBar setBackgroundImage:[UIImage imageNamed: @"header_background"]
+    //               forBarMetrics:UIBarMetricsDefault];
+//    UIImage *image = [UIImage imageNamed:@"header_background.jpg"];
+//    [[UINavigationBar appearance] setBackgroundImage:image forBarMetrics:UIBarMetricsDefault];
+  //  [[UINavigationBar appearance] setTintColor:blueColorOp];
+    
+ //   [[UIBarButtonItem appearance] setBackgroundImage:[[UIImage alloc] init] forState:UIControlStateNormal barMetrics:UIBarMetricsDefault];
+    
+    //ios 7
+  //  self.navigationController.navigationBar.translucent = NO;
+
+    
+    //make the text white
+    curBtn.backgroundColor = UIColorFromRGB(ORANGE_COLOR);
+
+  //  [curBtn setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
+
+}
+
+-(void) disableButton:(UIButton*) curBtn{
+      //[[clockInBtn layer] setMasksToBounds:YES];
+    [[curBtn layer] setCornerRadius:7.0f];
+    [[curBtn layer] setBorderWidth:0.5f];
+    curBtn.backgroundColor = UIColorFromRGB(ORANGE_COLOR);
+    
+    //remove the Gradient layer which gave use the blue color shades
+    CALayer* layer = [curBtn.layer valueForKey:@"GradientLayer"];
+    [layer removeFromSuperlayer];
+    [curBtn.layer setValue:nil forKey:@"GradientLayer"];
+
+    //diable the button
+    curBtn.enabled = FALSE;
+    curBtn.alpha = 0.5f;
+    [curBtn setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];   
+
+}
+
+
+- (void)viewDidLoad
+{
+    strLastClockInTime = @"";
+    strLastClockOutTime = @"";
+#ifdef DEBUG
+    _devDisplayLabel.hidden = NO;
+#endif
+    [super viewDidLoad];
+    
+    
+//only show ads on the personal app
+#ifdef PERSONAL_VERSION
+
+    self.bannerView = [[ADBannerView alloc] initWithFrame:CGRectMake(0, 0, self.adBannerContainer.bounds.size.width, self.adBannerContainer.bounds.size.height)];
+    [self.bannerView setAutoresizingMask:UIViewAutoresizingFlexibleWidth];
+    [self.bannerView setDelegate:self];
+    [self.adBannerContainer addSubview:self.bannerView];
+
+    //uncomment this when you want to test adMob
+    [self bannerView:self.bannerView didFailToReceiveAdWithError:nil];
+#endif
+    #ifdef DEBUG
+    // Dev
+//    self.lblDebug.text = @"Running in Dev Mode";
+    #endif
+
+    currentDistanceinMiles = 150;
+//    self.myLocationManager = [[CLLocationManager alloc] init];
+//    self.myLocationManager.delegate = self;
+
+
+  /*  if ([user.userID intValue] == 0)
+    {
+        LoginViewController *loginController = [[LoginViewController alloc] initWithNibName:@"LoginViewController" bundle:nil];
+        loginController.delegate = (id) self;
+        loginController.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+        
+        
+        [self presentModalViewController:loginController animated:YES];
+
+       // [self callLoginWebService];
+    }
+    else { //the user has been authenticated so check if he has set a passcode
+        if ([user.userPin length]  > 0)
+            [self showPasscodeViewController:NO];
+    }*/
+    
+  //  strLastClockInTime = @"";
+  //  strLastClockOutTime = @"";
+    //set up the info button
+  /*  UIButton* infoButton = [UIButton buttonWithType: UIButtonTypeInfoLight];
+
+    [infoButton setTitle:@"Settings" forState:UIControlStateNormal];
+    [infoButton addTarget:self action:@selector(infoButtonAction) forControlEvents:UIControlEventTouchUpInside];
+    UIBarButtonItem *modalButton = [[UIBarButtonItem alloc] initWithCustomView:infoButton];
+    [self.navigationItem setLeftBarButtonItem:modalButton animated:YES];  
+    
+    //set up the settings button
+    self.settingsButton = [[UIBarButtonItem alloc] initWithTitle:@"Settings" style:UIBarButtonItemStylePlain target:self action:@selector(settingsButtonAction)];
+                                                     
+    
+    self.navigationItem.leftBarButtonItem = self.settingsButton;
+   */
+    //reset to start
+    //user.currentClockMode = ClockModeIn;
+    //check to see what mode we are to figure out how we want to set the buttons
+    if (user.currentClockMode == ClockModeIn){
+        [self enableButton:clockInBtn];        
+        [self disableButton:clockOutBtn];
+    }
+    else {
+        [self disableButton:clockInBtn];
+        [self enableButton:clockOutBtn];        
+    }
+    if (user.lastClockIn != nil)
+        strLastClockInTime = user.lastClockIn;    
+    if (user.lastClockOut != nil)
+        strLastClockOutTime = user.lastClockOut;
+    
+
+    
+    [self tick:nil];
+
+}
+
+- (void)viewDidUnload
+{
+//only show ads on the personal app
+#ifdef PERSONAL_VERSION
+   
+    self.bannerView.delegate=nil;
+    self.admobBannerView.delegate = nil;
+#endif
+    [self setCurrentTimeLabel:nil];
+    formatterDateTime12hr = nil;
+    formatterTime = nil;
+    [self setClockInBtn:nil];
+    [self setClockOutBtn:nil];
+    [self setTimeClockTableView:nil];
+//    [self setLblDebug:nil];
+   // [myLocationManager stopUpdatingLocation];
+    [super viewDidUnload];
+    // Release any retained subviews of the main view.
+}
+
+- (void)viewWillAppear:(BOOL)animated
+{
+	[super viewWillAppear: animated];
+    
+    NSDictionary *navbarTitleTextAttributes = [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [UIColor whiteColor],
+                                               NSForegroundColorAttributeName,
+                                               nil];
+    [self.navigationController.navigationBar setTitleTextAttributes:navbarTitleTextAttributes];
+
+    if (![self.slidingViewController.underLeftViewController isKindOfClass:[MenuViewController class]]) {
+        self.slidingViewController.underLeftViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"Menu"];
+    }
+    self.slidingViewController.underRightViewController = nil;
+    
+    [self.view addGestureRecognizer:self.slidingViewController.panGesture];
+    
+ //   [self checkClockStatus];
+   // [self checkScheduledToWork];
+
+}
+
+
+-(void)bannerViewDidLoadAd:(ADBannerView *)banner
+{
+    if (!self.bannerIsVisible)
+    {
+        [UIView beginAnimations:@"animateAdBannerOn" context:NULL];
+    //    banner.frame = CGRectOffset(banner.frame, 0, 50);
+        [UIView commitAnimations];
+        self.bannerIsVisible = YES;
+    }
+}
+
+#ifdef PERSONAL_VERSION
+//if iAd fails pickup adMob
+-(void)bannerView:(ADBannerView *)banner didFailToReceiveAdWithError:(NSError
+                                                                      *)error
+
+{
+    if (self.bannerIsVisible)
+    {
+        [UIView beginAnimations:@"animateAdBannerOff" context:NULL];
+        banner.frame = CGRectOffset(banner.frame, 0, -50);
+        [UIView commitAnimations];
+        self.bannerIsVisible = NO;
+    }
+    
+    //switch to adMob:
+    
+    // 1
+    [self.bannerView removeFromSuperview];
+    
+    // 2
+    
+    _admobBannerView = [[GADBannerView alloc]
+                        initWithFrame:CGRectMake(0.0,0.0,
+                                                 GAD_SIZE_320x50.width,
+                                                 GAD_SIZE_320x50.height)];
+    
+
+    
+    // 3
+
+    self.admobBannerView.adUnitID = @"ca-app-pub-6730679122734693/8271726764";
+    
+    self.admobBannerView.rootViewController = self;
+
+    self.admobBannerView.delegate = self;
+    
+    // 4
+    [self.adBannerContainer addSubview:self.admobBannerView];
+    
+    GADRequest *request = [GADRequest request];
+    
+
+    [self.admobBannerView loadRequest:request];
+    
+}
+
+- (void)adView:(GADBannerView *)view didFailToReceiveAdWithError:(GADRequestError *)error {
+    [self.admobBannerView removeFromSuperview];
+}
+#endif
+
+- (void) getLocation:(id)sender
+{
+ //   [myLocationManager startUpdatingLocation];
+}
+
+-(void) updateUI{
+    if (user.currentClockMode == ClockModeIn)
+    {
+        //switch the enable and disable so clockIn is now disabled
+        [self enableButton:clockOutBtn];
+        [self disableButton:clockInBtn];
+        
+//         NSString *day = [strLastClockInTime substringToIndex:10];
+        
+//        DayTimeEntries *dayTimeEntry = [[DayTimeEntries alloc] init];
+//        dayTimeEntry.dayValue = day;
+/*        int count = [user.timeHistory count];
+        NSArray *array = [user.timeHistory objectForKey:day];
+        NSMutableArray *timeEntriesArray = [[NSMutableArray alloc] init];
+        NSString *timeEntry = [NSString stringWithFormat:@"IN: %@",strLastClockInTime];
+        [timeEntriesArray addObject:timeEntry];
+       if (count == 0 || ( array== nil)){
+            
+            //add new time Entries for that day since it doesn't exist
+            [user.timeHistory addObject:timeEntry];
+            [user.timeHistory setObject:timeEntriesArray forKey:day];
+            ;
+        }
+        else {
+
+           [user.timeHistory addObject:timeEntry];
+        }
+ */
+        //switch the clock mode
+        [TimeClockTableView reloadData];
+ 
+        user.currentClockMode = ClockModeOut;
+        
+    }
+    else {
+        //switch the enable and disable so clockOut is now disabled    
+        [self enableButton:clockInBtn];
+        [self disableButton:clockOutBtn];
+ /*       NSArray *array = [user.timeHistory objectForKey:day];
+        NSMutableArray *timeEntriesArray = [[NSMutableArray alloc] init];
+        NSString *timeEntry = [NSString stringWithFormat:@"IN: %@",strLastClockOutTime];
+        [timeEntriesArray addObject:timeEntry];
+        if (count == 0 || ( array== nil)){
+            
+            //add new time Entries for that day since it doesn't exist
+            [user.timeHistory setObject:timeEntriesArray forKey:day];
+        }
+        else {
+            NSString *timeEntry = [NSString stringWithFormat:@"OUT: %@",strLastClockOutTime];
+            [[user.timeHistory objectForKey:day] addObject:timeEntry];
+        }
+*/
+        //switch the clock mode
+        [TimeClockTableView reloadData];
+        user.currentClockMode = ClockModeIn;
+    }
+    //save data
+    [[NSUserDefaults standardUserDefaults] setInteger:user.currentClockMode forKey:@"clockMode"];
+    [[NSUserDefaults standardUserDefaults] setObject:user.lastClockIn forKey:@"lastClockIn"];
+    [[NSUserDefaults standardUserDefaults] setObject:user.lastClockOut forKey:@"lastClockOut"];
+
+}
+- (IBAction)doCockIn:(id)sender {
+    [self doClockInSteps];
+    
+}
+-(void)doClockInSteps{
+    [self startSpinner];
+    self.spinner.labelText = @"Clocking in..";
+    
+    lastClockInTime = self.getCurrentDateTime;  
+    strLastClockInTime = [formatterDateTime12hr stringFromDate:lastClockInTime];
+    strLastClockOutTime = @"";
+    
+#ifndef PERSONAL_VERSION
+    
+    [ self performSelector: @selector(getLocation:)
+                withObject: nil
+                afterDelay: 0
+     ];
+#endif
+    
+    //take out
+   // [self updateUI];
+    self.lastClockMode = ClockModeIn;
+    self.lastClockTime = lastClockInTime;
+    [self callTCSWebService:ClockModeIn dateTime:lastClockInTime];
+}
+
+- (IBAction)doClockOut:(id)sender {
+    [self doClockOutSteps];
+}
+
+-(void) doClockOutSteps{
+    [self startSpinner];
+    spinner.labelText = @"Clocking out..";
+    lastClockOutTime = self.getCurrentDateTime;
+    strLastClockOutTime = [formatterDateTime12hr stringFromDate:lastClockOutTime];
+    //take out
+   // [self updateUI];
+    self.lastClockMode = ClockModeOut;
+    self.lastClockTime = lastClockOutTime;
+    [self callTCSWebService:ClockModeOut dateTime:lastClockOutTime];
+    
+}
+
+-(void) settingsButtonAction
+{
+/*    SettingsViewController *controller = [[SettingsViewController alloc] initWithNibName:@"SettingsViewController" bundle:nil];
+    
+    //call the show passcode view controller and pass in a yes which tells it we need to set the passcode or change it
+    //[self showPasscodeViewController:YES];
+    UINavigationController *settingsNavigationController = [[UINavigationController alloc] initWithRootViewController:controller];
+
+    controller.settingsDelegate = (id) self;
+    controller.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+    
+    [self presentModalViewController:settingsNavigationController animated:YES];
+  */  
+}
+
+-(void) showPasscodeViewController: (BOOL) setPasscode{
+/*    PasscodeViewController *controller = [[PasscodeViewController alloc] initWithNibName:@"PasscodeViewController" bundle:nil];
+    controller.delegate = (id) self;
+    controller.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+    controller.passcodeSetup = setPasscode;
+    
+    [self presentModalViewController:controller animated:YES];
+  */  
+}
+
+/*- (void)loginViewControllerDidFinish:(SettingsViewController *)controller Name:(NSString *)userName Password:(NSString *)userPassword
+{
+    //get rid of the login screen
+    [self dismissModalViewControllerAnimated:YES];
+
+//    [self callLoginWebService:userName Password: userPassword];
+    
+
+}
+
+
+#pragma mark - Flipside View
+
+- (void)settingsViewControllerDidFinish:(SettingsViewController *)controller
+{
+    
+    [self dismissModalViewControllerAnimated:YES];
+}
+
+- (void)PasscodeViewControllerDidFinish:(PasscodeViewController *)controller
+{
+    
+    [self dismissModalViewControllerAnimated:YES];
+}
+*/
+
+
+#pragma mark - Table view data source
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+{
+    return 1;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{	
+    return 2;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    static NSString *CellIdentifier = @"Cell";
+    
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:CellIdentifier];
+    if (cell == nil) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:CellIdentifier];
+    }
+    
+    if (indexPath.row == 0){
+     //   NSString *strLastClockInTime = [formatterDateTime12hr stringFromDate:lastClockInTime];
+     //   if (strLastClockInTime ==nil)
+     //       strLastClockInTime = @"";
+        cell.textLabel.text = [NSString stringWithFormat:@"IN:     %@",strLastClockInTime];
+    }
+    else
+    {
+  //      NSString *strLastClockOutTime = [formatterDateTime12hr stringFromDate:lastClockOutTime];
+  //      if (strLastClockOutTime ==nil)
+  //          strLastClockOutTime = @"";
+        cell.textLabel.text = [NSString stringWithFormat:@"OUT: %@",strLastClockOutTime];
+    }
+    return cell;
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    
+    return @"Last Clock Time";
+}
+
+//need to move this to commonlib
+-(void) startSpinner{
+    if (!self.spinner)
+    {
+        self.spinner = [[MBProgressHUD alloc] initWithView:self.view];
+    }
+
+    [self.view addSubview:self.spinner];
+    [self.spinner show:YES];
+  //  [myLocationManager startUpdatingLocation];
+}
+
+-(void) stopSpinner{
+    [self.spinner hide:YES];
+}
+
+- (void) enteredBackground: (NSNotification*) notification{
+    //close any windows that maybe showing to get us back to the main clock in screen
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void) enteredForeground: (NSNotification*) notification{
+    if ([user.userPin length]  > 0)
+        [self showPasscodeViewController:NO];
+}
+
+
+
+- (IBAction)revealMenu:(id)sender {
+    [self.slidingViewController anchorTopViewTo:ECRight];
+
+}
+
+#pragma mark Alert View Button Actions
+- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex{
+    switch (alertView.tag) {
+        case WEB_SERVICE_OUT_OF_RANGE_ERROR: //override dialog
+        {
+            if (buttonIndex == 1){
+                self.bOverrideLocationCheck = YES;
+                [self callTCSWebService:self.lastClockMode dateTime:self.lastClockTime];
+            }
+        }break;
+            
+        default:
+            break;
+    }
+}
+
+#pragma mark Location Methods
+-(void)promptForOverride:(NSString*)message{
+    UIAlertView* alert = [[UIAlertView alloc] initWithTitle:@"Alert" message:message delegate:self cancelButtonTitle:@"Cancel" otherButtonTitles:@"Override" , nil];
+    alert.delegate = self;
+    alert.tag = WEB_SERVICE_OUT_OF_RANGE_ERROR;
+    [alert show];
+}
+@end

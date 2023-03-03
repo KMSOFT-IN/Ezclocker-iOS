@@ -1,0 +1,1047 @@
+//
+//  TimeSheetMasterViewController.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 10/22/13.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "TimeSheetMasterViewController.h"
+#import "AddTimeEntryViewController.h"
+#import "TimeSheetDetailViewController.h"
+#import <QuartzCore/QuartzCore.h>
+#import "user.h"
+#import "CommonLib.h"
+#import "EmailTimeSheetViewController.h"
+#import "ECSlidingViewController.h"
+#import "MetricsLogWebService.h"
+#import "EmailFeedbackViewController.h"
+#import "NSString+Extensions.h"
+#import "NSDate+Extensions.h"
+#import "DataManager.h"
+#import "Employee+Extensions.h"
+#import "Employee.h"
+#import "DayHistoryItem.h"
+#import "DayHistoryItem+CoreDataProperties.h"
+#import "ClockInfo+CoreDataProperties.h"
+#import "ClockInfo+Extensions.h"
+#import "SharedUICode.h"
+#import "completionblockdefines.h"
+#import "coredatadefines.h"
+#import "TimeEntry+Extensions.h"
+
+@interface TimeSheetMasterViewController () <StartEndDateInterface> {
+}
+
+@property (nonatomic, copy) NSString *startdate;
+@property (nonatomic, copy) NSString *enddate;
+@property (nonatomic, copy) NSString *selectedFromDateValue;
+@property (nonatomic, copy )NSString *selectedToDateValue;
+@property (nonatomic, assign) DateRangeMode curDateRangeActive;
+@property (nonatomic, assign) bool fetchData;
+@property (nonatomic, retain) UIRefreshControl* refreshControl;
+
+@end
+
+@implementation TimeSheetMasterViewController
+@synthesize TimeEntryTableView;
+@synthesize timeSheetDetailViewController = _timeSheetDetailViewController;
+@synthesize timeEntryItems;
+@synthesize employeeID;
+@synthesize employeeName;
+@synthesize refreshControl;
+
+UIButton *fromDateBtn, *toDateBtn;
+//UIImagePickerController* imagePickerController;
+UIDatePicker *theDatePicker;
+UIToolbar* pickerToolbar;
+UIView* pickerViewDate;
+//set the color and gradient
+
+
+//NSString *const ADD_TIME_ENTRY = @"Add Time Entry";
+NSString *const EMAIL_TIME_SHEET = @"Email Time Sheet";
+
+START_SPINNER()
+STOP_SPINNER()
+
+- (void)initValues {
+    self.startdate= @"";
+    self.enddate = @"";
+    self.selectedFromDateValue = @"";
+    self.selectedToDateValue = @"";
+    self.fetchData = true;
+}
+
+-(id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
+{
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    if (self){
+        self.title = NSLocalizedString(@"Time Sheet", @"Time Sheet");
+        self.tabBarItem.image = [UIImage imageNamed:@"clock"];
+        user = [UserClass getInstance];
+        [self initValues];
+    }
+    
+    return self;
+}
+
+- (id)initWithCoder:(NSCoder *)aDecoder
+{
+    self = [super initWithCoder:aDecoder];
+    if (self){
+        self.title = NSLocalizedString(@"Time Sheet", @"Time Sheet");
+        self.tabBarItem.image = [UIImage imageNamed:@"folder"];
+        user = [UserClass getInstance];
+        [self initValues];
+    }
+    
+    return self;
+}
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+ //   editFlag = NO;
+    
+//    ratingDialogType = EnjoyingEzClokcer_dlg;
+    ratingDialogType = Feedback_None;
+    
+
+    timeEntryItems = [[NSMutableDictionary alloc] initWithCapacity:0];
+    TimeEntryTableView.allowsSelectionDuringEditing = YES;
+    self.edgesForExtendedLayout = UIRectEdgeAll;
+    TimeEntryTableView.contentInset = UIEdgeInsetsMake(0., 0., CGRectGetHeight(self.tabBarController.tabBar.frame), 0);
+
+
+    // Uncomment the following line to preserve selection between presentations.
+    // self.clearsSelectionOnViewWillAppear = NO;
+ 
+    // Uncomment the following line to display an Edit button in the navigation bar for this view controller.
+    // self.navigationItem.rightBarButtonItem = self.editButtonItem;
+    
+//    UIBarButtonItem* addButton = [[UIBarButtonItem alloc] initWithTitle:@"Edit" style:UIBarButtonSystemItemAdd target:self action:@selector(editButtonAction)];
+    
+    //ios 7
+    self.navigationController.navigationBar.translucent = NO;
+
+    selectDateButton = [UIButton buttonWithType:UIButtonTypeRoundedRect];
+    selectDateButton.frame = CGRectMake(0, 0, 250.0f, 35.0f);
+    selectDateButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+  //  NSString *todayDateSr = [formatterDate stringFromDate:startingDate];
+ //   [selectDateButton setTitle:todayDateSr forState:UIControlStateNormal];
+    selectDateButton.titleLabel.font = [UIFont systemFontOfSize:20];
+    [selectDateButton addTarget:self action:@selector(doChangeDate) forControlEvents:UIControlEventTouchUpInside];
+    
+    [_selectedDateView addSubview:selectDateButton];
+
+    refreshControl = [[UIRefreshControl alloc] init];
+    refreshControl.attributedTitle = [[NSAttributedString alloc] initWithString:@"Please wait..."];
+    [refreshControl addTarget:self action:@selector(refresh:) forControlEvents:UIControlEventValueChanged];
+
+    [TimeEntryTableView addSubview:refreshControl];
+
+    NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
+    [center addObserver:self selector:@selector(dataManagerProcessCompleteNotification:) name:kDataManagerProcessCompleteNotification object:nil];
+
+    [self initColorsAndImages];
+}
+
+- (void)dataManagerProcessCompleteNotification:(NSNotification*)notification {
+    // This will be called when force sync as well as after an item is deleted for clock in/clock out because it already existed according to the server.
+    // Just simply reloadData
+    [self.TimeEntryTableView reloadData];
+}
+
+
+- (void)showServerBusy {
+    [SharedUICode displayServerIsBusy];
+}
+
+- (void)refresh:(UIRefreshControl*)sender {
+    DataManager* manager = [DataManager sharedManager];
+    if (manager.isBusy) {
+        [refreshControl endRefreshing];
+        [self showServerBusy];
+        return;
+    }
+    
+    NSError* error = nil;
+    [manager stopTimer];
+    NSInteger count = [manager doesCurrentEmployeeNeedingSubmission:&error];
+    if (nil != error) {
+        [refreshControl endRefreshing];
+        [SharedUICode messageBox:@"Error" message:[NSString stringWithFormat:@"There was an error checking if current employee has pending updates - %@", error.localizedDescription]];
+        [manager startUpdateTimer];
+        return;
+    }
+    if (0 == count) {
+        [self refreshTimeEntries:TRUE displayBusyMsg:TRUE];
+    } else {
+        [SharedUICode yesNo:nil message:@"You have PENDING UPDATES to the server.  If you refresh now, you will lose ALL unsaved pending changes to the server.\n\nAre you absolutely sure?" yesBtnTitle:@"Yes - Please Refresh" noBtnTitle:@"No - Do Nothing" withCompletion:^(YesNoCancelResult Result) {
+            switch (Result) {
+                case resultYes:
+                    [self refreshTimeEntries:TRUE displayBusyMsg:TRUE];
+                    break;
+                case resultNo:
+                    [refreshControl endRefreshing];
+                    [manager startUpdateTimer];
+                    break;
+                default:
+                    break;
+            }
+        }];
+    }
+}
+
+- (void)viewDidUnload
+{
+    [self setTimeEntryTableView:nil];
+    timeEntryItems = nil;
+    [self setTotalHoursLabel:nil];
+    [super viewDidUnload];
+    // Release any retained subviews of the main view.
+    // e.g. self.myOutlet = nil;
+}
+
+
+- (void)viewWillAppear:(BOOL)animated
+{
+    [super viewWillAppear: animated];
+    
+    if ([user.payrollStartDate length] > 0)
+        self.startdate = user.payrollStartDate;
+    if ([user.payrollEndDate length] > 0)
+        self.enddate = user.payrollEndDate;
+
+    if ([user.userType isEqualToString:@"employer"])
+        [self.parentViewController.navigationItem setTitle:employeeName];
+    else
+        [self.navigationItem setTitle:@"Time Sheet"];
+    addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(addButtonAction)];
+    
+    actionButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAction target:self action:@selector(actionButtonAction)];
+    
+    
+    if ([user.userType isEqualToString:@"employer"]){
+        self.parentViewController.navigationItem.rightBarButtonItems = [NSArray arrayWithObjects:actionButton, addButton, nil];
+    }
+    else
+        self.navigationItem.rightBarButtonItems = [NSArray arrayWithObjects:actionButton, addButton, nil];
+
+    _TotalHoursLabel.text = @"0h 0m";
+    DataManager* manager = [DataManager sharedManager];
+    if (!manager.isBusy) {
+        //[self callEmployeeTimeEntries:FALSE];
+//        NSError* error = nil;
+        //if we are an employer login and have no pending offline updates then refresh the list everytime we view the screen to make sure we always have the latest
+        //if ([user.userType isEqual:@"employer"] && (![manager
+//        if (![manager doesCurrentEmployeeNeedingSubmission:&error] && [CommonLib DoWeHaveNetworkConnection]) {
+//            [self refreshTimeEntries:TRUE displayBusyMsg:FALSE];
+//        }
+//        else
+ //       {
+            NSError* error = nil;
+            NSInteger count = [manager doesCurrentEmployeeNeedingSubmission:&error];
+            if (nil == error) {
+                if (0 == count && [CommonLib DoWeHaveNetworkConnection]) {
+                    [self refreshTimeEntries:TRUE displayBusyMsg:FALSE];
+                } else {
+                    [self refreshTimeEntries:FALSE displayBusyMsg:FALSE];
+                }
+            } else {
+#ifndef RELEASE
+                NSLog(@"Error while checking current employee needing submission - %@", error.localizedDescription);
+#endif
+            }
+            
+        //}
+
+    }
+
+}
+
+- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
+{
+    return (interfaceOrientation == UIInterfaceOrientationPortrait);
+}
+
+#pragma mark - Table view data source
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+{
+    // Return the number of sections.
+    DataManager* manager = [DataManager sharedManager];
+    NSArray* timeHistory = manager.timeHistory;
+    if (nil == timeHistory || [timeHistory count] == 0) {
+        return 1;
+    } else {
+        return [timeHistory count];
+    }
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
+    return 34.f;
+}
+
+//because we are overridng the color of the section header we'll also need to set the Header text
+//because by using this method it will override whatever is in titleForHeaderInSection method
+-(UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section
+{
+    UIView *tempView=[[UIView alloc]initWithFrame:CGRectMake(0,200,300,244)];
+    tempView.backgroundColor = UIColorFromRGB(BLUE_TOOLBAR_COLOR);
+  //  UILabel *tempLabel = [[UILabel alloc] init];
+    UILabel *tempLabel=[[UILabel alloc]initWithFrame:CGRectMake(15,0,300,36)];
+    tempLabel.backgroundColor=[UIColor clearColor];
+    tempLabel.textColor = [UIColor whiteColor];
+    tempLabel.font = [UIFont fontWithName:@"Helvetica" size:16.0f];
+    tempLabel.font = [UIFont boldSystemFontOfSize:16.0f];
+    DataManager* manager = [DataManager sharedManager];
+    if ([manager.timeHistory count] > 0)
+    {
+        DayHistoryItemInfo* info = [manager.timeHistory objectAtIndex:section];
+        tempLabel.text = info.displayDateTimeStr;
+    }
+    else {
+        tempLabel.text =  @"No timesheet entries available";
+    }
+    
+    [tempView addSubview:tempLabel];
+
+    return tempView;
+}
+
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{
+    
+    // Return the number of rows in the section.
+    DataManager* manager = [DataManager sharedManager];
+    if ([manager.timeHistory count] > 0)
+    {
+        // Return the number of rows in the section.
+        DayHistoryItemInfo* info = [manager.timeHistory objectAtIndex:section];
+        if (nil != info) {
+            NSArray *timeEntriesHistory = info.timeEntries;
+            if (nil == timeEntriesHistory) {
+                return 0;
+            }
+            NSInteger count = info.timeEntries.count;
+            return count;
+        }
+    }
+    return 0;
+}
+
+static UIImage* clockInImage = nil;
+static UIImage* clockOutImage = nil;
+
+- (void)initColorsAndImages {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        clockInImage = [UIImage imageNamed:@"clockin.png"];
+        clockOutImage = [UIImage imageNamed:@"clockout.png"];
+    });
+}
+
+- (void)setPendingUpdate:(UITableViewCell*)cell pending:(BOOL)bIsPendingUpdate {
+    if (bIsPendingUpdate) {
+        cell.backgroundColor = [CommonLib getHatchedBackColor];
+    } else {
+        cell.backgroundColor = [UIColor whiteColor];
+    }
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    static NSString *CellIdentifier = @"Cell";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:CellIdentifier];
+    if (cell == nil) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:CellIdentifier];
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+    }
+    DataManager* manager = [DataManager sharedManager];
+    if (manager.timeHistory != nil && [manager.timeHistory count] > 0){
+        DayHistoryItemInfo* info = [manager.timeHistory objectAtIndex:indexPath.section];
+        NSArray *timeEntriesPerDay = info.timeEntries;
+        TimeEntryInfo* timeEntryInfo = [timeEntriesPerDay objectAtIndex:indexPath.row];
+        TimeEntry* timeEntry = timeEntryInfo.timeEntry;
+        BOOL bIsPendingUpdate = ([timeEntry getDBStatus] != dsUpdated);
+        switch (timeEntryInfo.clockMode) {
+            case 0: {
+                if (timeEntry.clockIn) {
+                    if (!bIsPendingUpdate)
+                        bIsPendingUpdate = ([timeEntry.clockIn getDBStatus] != dsUpdated);
+                    NSString* dateTime = [timeEntry.clockIn.dateTimeEntry toDefaultTimeString];
+                    if (bIsPendingUpdate)
+                    {
+                        cell.textLabel.text = [NSString stringWithFormat:@"%@ (Not Synced)",dateTime];
+                        cell.backgroundColor = UIColorFromRGB(LIGHT_RED_COLOR);
+                    }
+                    else
+                    {
+                        cell.textLabel.text = dateTime;
+                        cell.backgroundColor = [UIColor whiteColor];
+                    }
+                    
+                }
+//                [self setPendingUpdate:cell pending:bIsPendingUpdate];
+                cell.imageView.image = clockInImage;
+                break;
+            }
+            case 1: {
+                if (timeEntry.clockOut) {
+                    if (!bIsPendingUpdate)
+                        bIsPendingUpdate = ([timeEntry.clockOut getDBStatus] != dsUpdated);
+                    NSString* dateTime = [timeEntry.clockOut.dateTimeEntry toDefaultTimeString];
+                    if (bIsPendingUpdate)
+                    {
+                        cell.textLabel.text = [NSString stringWithFormat:@"%@ (Not Synced)",dateTime];
+                        cell.backgroundColor = UIColorFromRGB(LIGHT_RED_COLOR);
+                    }
+                    else
+                    {
+                        cell.textLabel.text = dateTime;
+                        cell.backgroundColor = [UIColor whiteColor];
+                    }
+                }
+//                [self setPendingUpdate:cell pending:bIsPendingUpdate];
+                cell.imageView.image = clockOutImage;
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    return cell;
+}
+
+/*
+// Override to support conditional editing of the table view.
+- (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    // Return NO if you do not want the specified item to be editable.
+    return YES;
+}
+*/
+
+/*
+// Override to support editing the table view.
+- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    if (editingStyle == UITableViewCellEditingStyleDelete) {
+        // Delete the row from the data source
+        [tableView deleteRowsAtIndexPaths:[NSArray arrayWithObject:indexPath] withRowAnimation:UITableViewRowAnimationFade];
+    }   
+    else if (editingStyle == UITableViewCellEditingStyleInsert) {
+        // Create a new instance of the appropriate class, insert it into the array, and add a new row to the table view
+    }   
+}
+*/
+
+/*
+// Override to support rearranging the table view.
+- (void)tableView:(UITableView *)tableView moveRowAtIndexPath:(NSIndexPath *)fromIndexPath toIndexPath:(NSIndexPath *)toIndexPath
+{
+}
+*/
+
+/*
+// Override to support conditional rearranging of the table view.
+- (BOOL)tableView:(UITableView *)tableView canMoveRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    // Return NO if you do not want the item to be re-orderable.
+    return YES;
+}
+*/
+
+#pragma mark - Table view delegate
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    // Navigation logic may go here. Create and push another view controller.
+    if (!self.timeSheetDetailViewController){
+        self.timeSheetDetailViewController = [[TimeSheetDetailViewController alloc] initWithNibName:@"TimeSheetDetailViewController" bundle:nil];
+        self.timeSheetDetailViewController.delegate = (id) self;
+    }
+     // ...
+     // Pass the selected object to the new view controller.
+//    if (editFlag)
+//    {
+        
+        TimeEntryInfo *selectedTimeEntry;
+        NSNumber *selectedTimeEntryID = nil;
+        NSString *selectedTimeEntryNotes = @"";
+        DataManager* manager = [DataManager sharedManager];
+        NSArray* timeHistory = manager.timeHistory;
+        if (timeHistory != nil){
+            DayHistoryItemInfo* info = [timeHistory objectAtIndex:indexPath.section];
+
+            NSArray *timeEntriesPerDay = info.timeEntries;
+
+            selectedTimeEntry = [timeEntriesPerDay objectAtIndex:indexPath.row];
+            selectedTimeEntryID = selectedTimeEntry.timeEntry.timeEntryID;
+            selectedTimeEntryNotes = selectedTimeEntry.timeEntry.notes;
+            
+            
+
+            TimeEntry* timeEntry = selectedTimeEntry.timeEntry;
+//            CLLocationCoordinate2D cord =  timeEntry.clockIn.location;
+            self.timeSheetDetailViewController.timeEntry = timeEntry;
+
+            self.timeSheetDetailViewController.selectedMode = selectedTimeEntry.clockMode;
+        }
+
+        self.timeSheetDetailViewController.employeeName = employeeName;
+        self.timeSheetDetailViewController.employeeId = employeeID;
+        [self.navigationController pushViewController:self.timeSheetDetailViewController animated:YES];
+     
+}
+
+-(void) refreshTimeEntries:(BOOL)bRefresh displayBusyMsg:(BOOL)bDislayBusyMsg {
+    @synchronized (self) {
+        //if employr view did not give us the employeeID then use user.userid which is the current user of the app
+        if (0 == [employeeID intValue]) {
+            employeeID = user.userID;
+        }
+        
+        DataManager* dataManager = [DataManager sharedManager];
+        if ([dataManager isBusy]) {
+            [refreshControl endRefreshing];
+            if (bDislayBusyMsg) {
+                [SharedUICode displayServerIsBusy];
+                return;
+            }
+            [dataManager startUpdateTimer];
+            return;
+        }
+        
+        //only resume if we have an employeeID because if we don't then we are in trouble and don't need to show that to the user
+        if (0 == [employeeID intValue])
+        {
+            [dataManager startUpdateTimer];
+            [refreshControl endRefreshing];
+            return;
+        }
+        
+#ifndef RELEASE
+        NSLog(@"emplID= %d", [employeeID intValue]);
+        
+#endif
+        if (nil == user) {
+            [dataManager startUpdateTimer];
+            [refreshControl endRefreshing];
+        }
+        
+        [user checkPayrollStartDate:self]; // this will set startDate and endDate
+        
+        [selectDateButton setTitle:[NSString stringWithFormat:@"%@ - %@",self.startdate, self.enddate] forState:UIControlStateNormal];
+        [self startSpinner];
+        self.spinner.labelText = @"Refreshing, please wait...";
+        NSDictionary* dict = @{kStartDateKey: self.startdate, kEndDateKey: self.enddate};
+        [dataManager loadTimesheetsForEmployee:dict refresh:bRefresh withCompletion:^(NSInteger errorCode, NSString * _Nullable resultMessage, NSDictionary * _Nullable results, NSError * _Nullable error) {
+            if (errorCode == SERVICE_UNAVAILABLE_ERROR) {
+                [refreshControl endRefreshing];
+                [self stopSpinner];
+                [SharedUICode displayServiceUnavailableError];
+                [dataManager startUpdateTimer];
+                return;
+            }
+            if (errorCode == SERVICE_ERRORCODE_UNKNOWN_ERROR) {
+                [refreshControl endRefreshing];
+                [self stopSpinner];
+                [SharedUICode checkResultsMessageAndDisplayError:resultMessage error:error];
+                [dataManager startUpdateTimer];
+                return;
+            }
+            NSString *totalDuration = [DataManager formatInterval:dataManager.totalDuration];
+            _TotalHoursLabel.text = totalDuration;
+            [refreshControl endRefreshing];
+            [TimeEntryTableView reloadData];
+            //launch the review dialog
+            int visitCounter = (int) [user.appLaunchCounter integerValue];
+            int didUserGiveRatingFeedback = (int) [user.userGaveUsRatingFeedback integerValue];
+            //only launch if the counter is a certain number and we haven't asked him before and it's been 21 since they installed the app so they've been using it for a while now
+            NSDate *todaysDate = [NSDate date];
+            NSInteger numOfDaysSinceInstall = [CommonLib daysBetweenDate:user.appInstallDate andDate:todaysDate];
+            if ((visitCounter >= MAX_TIMES_APP_LAUNCHED) && (didUserGiveRatingFeedback == 0) && numOfDaysSinceInstall > 14)
+            {
+                [self stopSpinner];
+                //turn off the dialog so we don't show it anymore
+                user.userGaveUsRatingFeedback = [NSNumber numberWithInt:1];
+                [[NSUserDefaults standardUserDefaults] setInteger:[user.userGaveUsRatingFeedback intValue] forKey:@"userGaveUsRatingFeedback"];
+                
+                //show first rating dialog
+                ratingDialogType = EnjoyingEzClokcer_dlg;
+                UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Enjoying ezClocker?" delegate:self cancelButtonTitle:@"Not really" otherButtonTitles:@"Yes!", nil];
+                
+                [alert show];
+                
+            }
+            [self stopSpinner];
+            [dataManager startUpdateTimer];
+        }];
+    }
+}
+
+- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex {
+    if(ratingDialogType == EnjoyingEzClokcer_dlg)
+    {
+        if (buttonIndex != [alertView cancelButtonIndex]) {
+            //show second rating dialog
+            ratingDialogType = CanYouRateUs_dlg;
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"How about a rating on the App Store, then?" delegate:self cancelButtonTitle:@"No, thanks" otherButtonTitles:@"Ok, sure", nil];
+            
+            [alert show];
+        }
+        else{
+            //show third rating dialog
+            ratingDialogType = GiveUsFeedback_dlg;
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Would you mind giving us some feedback?" delegate:self cancelButtonTitle:@"No, thanks" otherButtonTitles:@"Ok, sure", nil];
+            
+            [alert show];
+            
+            
+        }
+    }
+    else if(ratingDialogType == CanYouRateUs_dlg){
+        if (buttonIndex != [alertView cancelButtonIndex]) {
+            //send a notification to let us know that someone went to the app store to rate us
+            [MetricsLogWebService LogException: [NSString stringWithFormat:@"Somebody Selected to Rate us on the App Store. Yay!!!!"]];
+#ifdef PERSONAL_VERSION
+            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://itunes.apple.com/us/app/ezclocker-personal-time-tracking/id833047956?mt=8"]];
+#else
+            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://itunes.apple.com/us/app/ezclocker/id800807197?ls=1&mt=8"]];
+#endif
+        }
+    }
+    else if (ratingDialogType == GiveUsFeedback_dlg)
+    {
+        if (buttonIndex != [alertView cancelButtonIndex]) {
+            //take them to our feedback screen
+            EmailFeedbackViewController *emailFeedbackController = [self.storyboard instantiateViewControllerWithIdentifier:@"EmailFeedback"];
+            UINavigationController *emailFeedbackNavigationController = [[UINavigationController alloc] initWithRootViewController:emailFeedbackController];
+            
+            
+            emailFeedbackController.delegate = (id) self;
+            emailFeedbackController.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+            
+            [self presentViewController:emailFeedbackNavigationController animated:YES completion:nil];
+            
+        }
+        else{
+            [MetricsLogWebService LogException: [NSString stringWithFormat:@"Somebody Didn't want to give us feedback :-("]];
+
+        }
+        
+    }
+}
+
+
+    
+-(void) emailButtonAction
+{
+    
+
+    EmailTimeSheetViewController *emaiViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"EmailTimeSheet"];
+    
+    timeSheetNavigationController = [[UINavigationController alloc] initWithRootViewController:emaiViewController];
+
+
+    emaiViewController.startDate = self.startdate;
+    emaiViewController.endDate = self.enddate;
+    emaiViewController.employeeID = employeeID;
+    emaiViewController.employeeEmail = _employeeEmail;
+
+    
+    emaiViewController.delegate = (id) self;
+    emaiViewController.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+ 
+    
+    [self presentViewController:timeSheetNavigationController animated:YES completion:nil];
+    
+}
+-(void) addButtonAction
+{
+    AddTimeEntryViewController *addViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"AddtimeEntryViewController"];
+    
+    timeSheetNavigationController = [[UINavigationController alloc] initWithRootViewController:addViewController];
+
+
+    
+ //   AddTimeEntryViewController *controller = [[AddTimeEntryViewController alloc] initWithNibName:@"AddTimeEntryViewController" bundle:nil];
+    
+    addViewController.employeeID = employeeID;
+    addViewController.delegate = (id) self;
+    addViewController.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+    
+    [self presentViewController:timeSheetNavigationController animated:YES completion:nil];
+    
+}
+
+-(void) actionButtonAction
+{
+    UIActionSheet *pickerViewAction = [[UIActionSheet alloc] initWithTitle:@"Time Sheet"
+                                                 delegate:self
+                                        cancelButtonTitle:@"Cancel"
+                                   destructiveButtonTitle:nil
+                                        otherButtonTitles:EMAIL_TIME_SHEET, nil];
+
+    [pickerViewAction  showInView:[self.view window]];
+//    [pickerViewAction setBounds:CGRectMake(0,0,320, 464)];
+
+    
+    
+}
+
+/*-(void) editButtonAction
+{
+    if (editFlag == YES){
+        editFlag = NO;
+        self.navigationItem.leftBarButtonItem.title = @"Edit";
+        [TimeEntryTableView setEditing:NO animated: NO];   
+    }
+    else {
+        editFlag = YES;
+        self.navigationItem.leftBarButtonItem.title = @"Done";
+        [TimeEntryTableView setEditing:YES animated: YES];   
+
+    }
+}
+*/
+- (void)addTimeEntryViewControllerDidFinish:(AddTimeEntryViewController *)controller
+{
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)emailTimeSheetViewControllerDidFinish:(EmailTimeSheetViewController *)controller
+{
+    
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)saveTimeEntryDidFinish:(TimeSheetDetailViewController *)controller
+{
+    [self.navigationController popViewControllerAnimated:YES];
+}
+
+- (void)emailFeedbackViewControllerDidFinish:(UIViewController *)controller
+{
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+
+-(UIButton *) createDateRangeButton
+{
+    UIButton *currBtn = [[UIButton alloc] initWithFrame:CGRectMake(0, 0, 70, 40)];
+    
+ //   [currBtn setTitle:@"From 09/08/13" forState:UIControlStateNormal];
+    currBtn.titleLabel.font = [UIFont systemFontOfSize:12];
+    [currBtn.titleLabel setTextAlignment:NSTextAlignmentCenter];
+    currBtn.titleLabel. numberOfLines = 0; // Dynamic number of lines
+    currBtn.titleLabel.lineBreakMode = NSLineBreakByWordWrapping;
+    
+    return currBtn;
+
+}
+
+//picking dates for reporting
+-(void)DatePickerView
+{
+    CGRect screenBound = [[UIScreen mainScreen] bounds];
+    CGSize screenSize = screenBound.size;
+    CGFloat screenHeight = screenSize.height;
+    
+    pickerViewDate = [[UIView alloc] initWithFrame:CGRectMake(0, screenHeight-300, 320, 246)];
+    [pickerViewDate setBackgroundColor:[UIColor colorWithRed:240/255.0 green:240/255.0 blue:240/255.0 alpha:1.0]];
+    
+    theDatePicker = [[UIDatePicker alloc] initWithFrame:CGRectMake(0, 44, 0, 0)];
+    theDatePicker.datePickerMode = UIDatePickerModeDate;
+    theDatePicker.hidden = NO;
+//    NSDate *date = [NSDate date];
+//    theDatePicker.date = date;
+   
+ //   pickerViewDate = [[UIActionSheet alloc] initWithTitle:@""
+ //                                                delegate:nil
+ //                                       cancelButtonTitle:nil
+ //                                  destructiveButtonTitle:nil
+ //                                       otherButtonTitles:nil];
+   
+    
+//    theDatePicker = [[UIDatePicker alloc] initWithFrame:CGRectMake(0.0, 44.0, 0.0, 0.0)];
+//    theDatePicker.datePickerMode = UIDatePickerModeDate;
+ //   [UIView appearanceWhenContainedIn:[UITableView class], [UIDatePicker class], nil].backgroundColor = [UIColor colorWithWhite:1 alpha:1];
+
+//    theDatePicker.backgroundColor = [UIColor whiteColor];
+    
+
+    [theDatePicker addTarget:self action:@selector(dateChanged) forControlEvents:UIControlEventValueChanged];
+
+    fromDateBtn = [self createDateRangeButton];
+    NSString *value = [[NSString alloc] initWithFormat:@"From %@", self.startdate];
+    [fromDateBtn setTitle:value forState:UIControlStateNormal];
+    self.selectedFromDateValue = self.startdate;
+    
+    //init the value of the date picker to the from date value
+    NSDate* dateFromString = [self.startdate toDefaultDate];
+    
+    [theDatePicker setDate:dateFromString];
+
+
+ //   theDatePicker.date = startdate;
+    
+    fromDateBtn.backgroundColor = UIColorFromRGB(BLUE_TOOLBAR_COLOR);
+    toDateBtn = [self createDateRangeButton];
+    toDateBtn.backgroundColor = [UIColor grayColor];
+    value = [[NSString alloc] initWithFormat:@"To %@", self.enddate];
+    self.selectedToDateValue = self.enddate;
+    
+    [toDateBtn setTitle:value forState:UIControlStateNormal];
+    
+    [fromDateBtn addTarget:self
+                    action:@selector(DatePickerFromDateClick)
+          forControlEvents:UIControlEventTouchDown];
+    [toDateBtn addTarget:self
+                    action:@selector(DatePickerToDateClick)
+          forControlEvents:UIControlEventTouchDown];
+    
+    
+    pickerToolbar = [[UIToolbar alloc] initWithFrame:CGRectMake(0, 0, 320, 44)];
+    pickerToolbar.barStyle=UIBarStyleBlackOpaque;
+    [pickerToolbar sizeToFit];
+    
+    @try {
+        
+        NSMutableArray *barItems = [[NSMutableArray alloc] init];
+        
+        UIBarButtonItem *doneDateBarBtn = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(DatePickerDoneClick)];
+        
+        UIBarButtonItem *fromDateBarBtn = [[UIBarButtonItem alloc] initWithCustomView:fromDateBtn];
+        UIBarButtonItem *toDateBarBtn = [[UIBarButtonItem alloc] initWithCustomView:toDateBtn];
+        UIBarButtonItem *flexSpace = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:self action:nil];
+
+        //this tells us if the From or To button is active
+        self.curDateRangeActive = FromDateActive;
+        
+        [barItems addObject:fromDateBarBtn];
+        [barItems addObject:toDateBarBtn];
+        [barItems addObject:flexSpace];
+        [barItems addObject:doneDateBarBtn];
+        
+        
+        [pickerToolbar setItems:barItems animated:YES];
+        [pickerViewDate addSubview:pickerToolbar];
+        [pickerViewDate addSubview:theDatePicker];
+ //       [pickerViewDate  showInView:self.view];
+ //       [pickerViewDate setBounds:CGRectMake(0,0,320, 464)];
+
+        [self.view addSubview:pickerViewDate];
+
+        
+    }
+    @catch (id theException) {
+#ifndef RELEASE
+        NSLog(@"%@ doesn't respond to appendString:!", [theException name]);
+#endif
+    }
+}
+
+-(IBAction)dateChanged{
+    
+    NSString *datePicked = [[theDatePicker date] toDefaultDateString];
+    if (self.curDateRangeActive == FromDateActive){
+        fromDateBtn.titleLabel.text = [[NSString alloc] initWithFormat:@"From %@", datePicked];
+        self.selectedFromDateValue = datePicked;
+    }
+    else{
+        toDateBtn.titleLabel.text = [[NSString alloc] initWithFormat:@"To %@", datePicked];
+        self.selectedToDateValue = datePicked;
+    }
+}
+
+
+-(BOOL)closeDatePicker:(id)sender{
+    [pickerViewDate removeFromSuperview];
+    //   [SelectedTextField resignFirstResponder];
+    
+    
+    return YES;
+}
+
+- (void)closeDatePickerAndCallEmployeeTimeEntriesIfNeeded {
+    [self closeDatePicker:self];
+    NSString *fromDateValue = self.selectedFromDateValue;
+    NSString *toDateValue = self.selectedToDateValue;
+    //if the values of the date range are different from the one on the screen then fetch new time sheet with the new dates
+    if (!([fromDateValue isEqualToString:self.startdate] && [toDateValue isEqualToString:self.enddate]))
+    {
+        self.startdate = fromDateValue;
+        self.enddate = toDateValue;
+        user.payrollStartDate = self.startdate;
+        user.payrollEndDate = self.enddate;
+        //save dates
+        [[NSUserDefaults standardUserDefaults] setObject:user.payrollStartDate forKey:@"payrollStartDate"];
+        [[NSUserDefaults standardUserDefaults] setObject:user.payrollEndDate forKey:@"payrollEndDate"];
+        [[NSUserDefaults standardUserDefaults] synchronize]; //write out the data
+
+        [self refreshTimeEntries:TRUE displayBusyMsg:TRUE];
+    } else {
+        DataManager* manager = [DataManager sharedManager];
+        [manager startUpdateTimer];
+    }
+}
+
+/*-(IBAction)DatePickerDoneClick{
+    
+    NSString *fromDateValue = self.selectedFromDateValue;
+    NSString *toDateValue = self.selectedToDateValue;
+    
+    NSDateFormatter *datePickerFormat = [[NSDateFormatter alloc] init];
+    [datePickerFormat setDateFormat:@"MM/dd/yyyy"];
+    NSDate *fromDate = [datePickerFormat dateFromString:fromDateValue];
+    NSDate *toDate = [datePickerFormat dateFromString:toDateValue];
+    
+    NSComparisonResult result;
+    
+    result = [fromDate compare:toDate]; // comparing two dates
+    
+    if(result == NSOrderedDescending)
+    {
+        NSString *dlgMessage = [[NSString alloc] initWithFormat:@"ERROR: The from date %@ can not be later than the to date %@", fromDateValue, toDateValue];
+
+        UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:dlgMessage delegate:self cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        
+        [alert show];
+
+    }
+    else{
+
+        DataManager* manager = [DataManager sharedManager];
+        if (manager.isBusy) {
+            [self showServerBusy];
+            return;
+        }
+
+        NSError* error = nil;
+        [manager stopTimer];
+        if (![manager doesCurrentEmployeeNeedingSubmission:&error]) {
+#ifndef RELEASE
+            if (nil != error) {
+                [SharedUICode messageBox:@"Error" message:[NSString stringWithFormat:@"There was an error checking if the server needs update %@", error.localizedDescription]];
+                [manager startUpdateTimer];
+                return;
+            }
+#endif
+            [self closeDatePickerAndCallEmployeeTimeEntriesIfNeeded];
+        } else {
+            [SharedUICode yesNo:nil message:@"You have PENDING UPDATES to the server.  If you refresh now, you will lose ALL unsaved pending changes to the server.\n\nAre you absolutely sure?" yesBtnTitle:@"Yes - Please Refresh" noBtnTitle:@"No - Do Nothing" withCompletion:^(YesNoCancelResult Result) {
+                switch (Result) {
+                case resultYes:
+                    [self closeDatePickerAndCallEmployeeTimeEntriesIfNeeded];
+                    break;
+                case resultNo:
+                    [manager startUpdateTimer];
+                    break;
+                default:
+                    break;
+                }
+            }];
+        }
+    }
+    
+}
+ */
+
+-(IBAction)DatePickerDoneClick{
+    
+    DataManager* manager = [DataManager sharedManager];
+    if (manager.isBusy) {
+        [self showServerBusy];
+        return;
+    }
+    
+    NSError* error = nil;
+    [manager stopTimer];
+    NSInteger count = [manager doesCurrentEmployeeNeedingSubmission:&error];
+    if (nil != error) {
+        [SharedUICode messageBox:@"Error" message:[NSString stringWithFormat:@"There was an error checking if current employee has pending updates - %@", error.localizedDescription]];
+        [manager startUpdateTimer];
+        return;
+    }
+    if (0 == count) {
+        [self closeDatePickerAndCallEmployeeTimeEntriesIfNeeded];
+    } else {
+        [SharedUICode yesNo:nil message:@"You have PENDING UPDATES to the server.  If you refresh now, you will lose ALL unsaved pending changes to the server.\n\nAre you absolutely sure?" yesBtnTitle:@"Yes - Please Refresh" noBtnTitle:@"No - Do Nothing" withCompletion:^(YesNoCancelResult Result) {
+            switch (Result) {
+                case resultYes:
+                    [self closeDatePickerAndCallEmployeeTimeEntriesIfNeeded];
+                    break;
+                case resultNo:
+                    [manager startUpdateTimer];
+                    break;
+                default:
+                    break;
+            }
+        }];
+    }
+    
+    
+    
+}
+-(IBAction)DatePickerFromDateClick{
+    self.curDateRangeActive = FromDateActive;
+    fromDateBtn.backgroundColor = UIColorFromRGB(BLUE_TOOLBAR_COLOR);
+    toDateBtn.backgroundColor = [UIColor grayColor];
+
+    NSString *dataValue = [fromDateBtn.titleLabel.text substringFromIndex:5];
+    NSDate* dateFromString = [dataValue toDefaultDate];
+
+    [theDatePicker setDate:dateFromString];
+    
+}
+-(IBAction)DatePickerToDateClick{
+    self.curDateRangeActive = ToDateActive;
+    toDateBtn.backgroundColor = UIColorFromRGB(BLUE_TOOLBAR_COLOR);
+    fromDateBtn.backgroundColor = [UIColor grayColor];
+    
+    NSString *dataValue = [toDateBtn.titleLabel.text substringFromIndex:3];
+    NSDate* dateFromString = [dataValue toDefaultDate];
+    
+    [theDatePicker setDate:dateFromString];
+    
+}
+
+- (NSInteger)numberOfComponentsInPickerView:(UIPickerView *)pickerView{
+    return 1;
+}
+
+// returns the number of rows
+- (NSInteger)pickerView:(UIPickerView *)pickerView numberOfRowsInComponent:(NSInteger)component{
+    return 30;
+    //    return [pickerViewArray count];
+}
+
+
+
+- (IBAction)doSetDateRange:(id)sender {
+    [self DatePickerView];
+}
+
+-(void) doChangeDate{
+    [self DatePickerView];
+}
+
+- (void)actionSheet:(UIActionSheet *)actionSheet clickedButtonAtIndex:(NSInteger)buttonIndex {
+    //Get the name of the current pressed button
+    NSString *buttonTitle = [actionSheet buttonTitleAtIndex:buttonIndex];
+    if  ([buttonTitle isEqualToString:EMAIL_TIME_SHEET]) {
+        [self emailButtonAction];
+    }
+
+}
+- (IBAction)revealMenu:(id)sender {
+    [self.slidingViewController anchorTopViewTo:ECRight];
+    
+}
+@end

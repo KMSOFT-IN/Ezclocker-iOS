@@ -1,0 +1,56 @@
+//
+//  TimeSheetDetailViewController.h
+//  ezClocker
+//
+//  Created by Raya Khashab on 10/22/13.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import "MBProgressHUD.h"
+#import <MapKit/MapKit.h>
+#import "CommonLib.h"
+@class TimeSheetDetailViewController;
+
+
+@protocol TimeSheetDetailViewControllerDelegate
+- (void)saveTimeEntryDidFinish:(TimeSheetDetailViewController *)controller;
+@end
+
+@interface TimeSheetDetailViewController : UIViewController<NSURLConnectionDataDelegate, UITextFieldDelegate, MKMapViewDelegate, UIAlertViewDelegate, UITableViewDelegate>{
+    NSDate *timeEntry;
+    NSMutableData *data;
+    UIDatePicker *pickDate;
+    CGPoint originalCenter;
+    CGSize scrollViewCGSize;
+    int TextFieldMode;
+    UIDatePicker *theDatePicker;
+    UIToolbar* pickerToolbar;
+    UIView* pickerViewDate;
+    NSDateFormatter *formatterDateTime, *formatterDateTime12, *formatterISO8601DateTime;
+}
+@property (strong, nonatomic) MBProgressHUD *spinner;
+- (IBAction)clockOutTouchDown:(id)sender;
+@property (weak, nonatomic) IBOutlet UILabel *timeEntryLabel;
+- (IBAction)doClockInEditingBegin:(id)sender;
+@property (weak, nonatomic) IBOutlet UITextField *clockInTextField;
+@property (weak, nonatomic) IBOutlet UITextField *clockOutTextField;
+- (IBAction)clockInTouchDown:(id)sender;
+@property (strong, nonatomic) NSNumber *timeEntryID;
+@property (strong, nonatomic) NSString *timeEntryNotes;
+@property (weak, nonatomic) IBOutlet UILabel *clockOutLabel;
+@property (strong, nonatomic) NSString *clockInDateTime;
+@property (strong, nonatomic) NSString *clockOutDateTime;
+@property (weak, nonatomic) IBOutlet UILabel *reasonLabel;
+@property (strong, nonatomic) IBOutlet UIScrollView *scrollView;
+- (IBAction)doDeleteTimeEntry:(id)sender;
+@property (weak, nonatomic) IBOutlet UITableView *mapHistoryTable;
+
+@property (weak, nonatomic) IBOutlet UITextView *reasonTextField;
+@property (assign, nonatomic) IBOutlet id <TimeSheetDetailViewControllerDelegate> delegate;
+@property (nonatomic, retain) IBOutlet MKMapView* _mapView;
+@property (nonatomic, assign) CLLocationCoordinate2D clockInLocation;
+@property (nonatomic, assign) CLLocationCoordinate2D clockOutLocation;
+@property (nonatomic, assign) ClockMode selectedMode;
+@property (nonatomic, retain) NSString *employeeName;
+@end

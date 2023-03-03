@@ -1,0 +1,49 @@
+//
+//  SharedUICode.h
+//  ezClocker
+//
+//  Created by Kenneth Lewis on 1/11/16.
+//  Copyright © 2016 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <Foundation/Foundation.h>
+#import "completionblockdefines.h"
+
+@interface SharedUICode : NSObject
+
+#define START_SPINNER() \
+-(void) startSpinner{ \
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = TRUE; \
+    if (!self.spinner) \
+    { \
+        self.spinner = [[MBProgressHUD alloc] initWithView:self.view]; \
+        [self.view addSubview:self.spinner]; \
+    } \
+    [self.spinner show:YES]; \
+    self.view.userInteractionEnabled = FALSE; \
+    self.tabBarController.view.userInteractionEnabled = FALSE; \
+}
+
+#define STOP_SPINNER() \
+-(void) stopSpinner{ \
+    if (self.spinner) { \
+        [self.spinner hide:YES]; \
+    } \
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO; \
+    self.view.userInteractionEnabled = TRUE; \
+    self.tabBarController.view.userInteractionEnabled = TRUE; \
+}
+
++ (void)checkResultsMessageAndDisplayError:(NSString*)resultMessage error:(NSError*)error;
+
++ (void)displayServiceUnavailableError;
++ (void)displayServiceUnavailableErrorWithMsg:(NSString*)msg;
++ (void)displayServiceUnavailableErrorWithMsg:(NSString*)msg withCompletion:(CompletionBlock)completion;
++ (void)displayServerIsBusy;
+
++ (void)messageBox:(NSString*)title message:(NSString*)message;
++ (void)messageBox:(NSString*)title message:(NSString*)message withCompletion:(CompletionBlock)completion;
++ (void)yesNoCancel:(NSString*)title message:(NSString*)message yesBtnTitle:(NSString*)yesBtnTitle noBtnTitle:(NSString*)noBtnTitle cancelBtnTitle:(NSString*)cancelBtnTitle withCompletion:(YesNoCancelCompletionBlock)completion;
++ (void)yesNo:(NSString*)title message:(NSString*)message yesBtnTitle:(NSString*)yesBtnTitle noBtnTitle:(NSString*)noBtnTitle withCompletion:(YesNoCancelCompletionBlock)completion;
+
+@end

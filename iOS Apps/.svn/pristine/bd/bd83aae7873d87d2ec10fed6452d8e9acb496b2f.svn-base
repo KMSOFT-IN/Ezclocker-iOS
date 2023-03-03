@@ -1,0 +1,498 @@
+//
+//  TimeEntry+Extensions.m
+//  ezClocker
+//
+//  Created by Kenneth Lewis on 12/15/15.
+//  Copyright © 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "TimeEntry+Extensions.h"
+#import "ClockInfo.h"
+#import "ClockInfo+Extensions.h"
+#import "NSManagedObjectContext+Extensions.h"
+#import "NSString+Extensions.h"
+#import "NSDate+Extensions.h"
+#import "debugdefines.h"
+#import "TimeEntry+CoreDataProperties.h"
+#import "DayHistoryItem.h"
+#import "NSNumber+Extensions.h"
+
+@implementation TimeEntry (TimeEntryExtensions)
+
+- (void)setValuesForKeysWithDictionary:(NSDictionary<NSString *,id> *)keyedValues
+{
+    NSAssert(nil != keyedValues, @"Error initializing Managed Object TimeEntry");
+}
+
+- (void)updateClockInClockOut:(NSDate *)clockInDate clockOut:(NSDate *)clockOutDate {
+    ClockInfo* clockInfo;
+    // Clock In Date
+    if (clockInDate) {
+        if (nil == self.clockIn) {
+            clockInfo = [self.managedObjectContext insertNewEntityForClass:[ClockInfo class]];
+            self.clockIn = clockInfo;
+        } else {
+            clockInfo = self.clockIn;
+        }
+        clockInfo.dateTimeEntry = clockInDate;
+    } else {
+        // Clock In Info
+        if (self.clockIn) {
+            ClockInfo* info = self.clockIn;
+            self.clockIn = nil;
+            [self.managedObjectContext deleteObject:info];
+        }
+    }
+
+    // Clock Out Date
+    if (clockOutDate) {
+        if (nil == self.clockOut) {
+            clockInfo = [self.managedObjectContext insertNewEntityForClass:[ClockInfo class]];
+            self.clockOut = clockInfo;
+        } else {
+            clockInfo = self.clockOut;
+        }
+        clockInfo.dateTimeEntry = clockOutDate;
+    } else {
+        [self deleteClockOut];
+    }
+}
+
+- (BOOL)saveFromTimeEntry:(TimeEntry*)timeEntry error:(NSError*__autoreleasing*)error {
+    DEBUG_MSG
+    NSAssert(nil != timeEntry, @"timeEntry cannot be nil %@", msg);
+    NSAssert(nil != error, @"error cannot be nil %@", msg);
+    NSAssert(self != timeEntry, @"timeEntry cannot be the same as self - %@", msg);
+    self.notes = timeEntry.notes;
+    self.timeEntryID = timeEntry.timeEntryID;
+    self.totalMilliseconds = timeEntry.totalMilliseconds;
+    self.status = timeEntry.status;
+    ClockInfo* clockInfo;
+    if (timeEntry.clockIn) {
+        if (nil == self.clockIn) {
+            clockInfo = [self.managedObjectContext insertNewEntityForClass:[ClockInfo class]];
+            self.clockIn = clockInfo;
+        } else {
+            clockInfo = self.clockIn;
+        }
+        [clockInfo assign:timeEntry.clockIn];
+    } else {
+#ifndef RELEASE
+        NSLog(@"WARNING! No clockIn provide by the timeEntry passed in %@", msg);
+#endif
+    }
+    if (timeEntry.clockOut) {
+        if (nil == self.clockOut) {
+            clockInfo = [self.managedObjectContext insertNewEntityForClass:[ClockInfo class]];
+            self.clockOut = clockInfo;
+        } else {
+            clockInfo = self.clockOut;
+        }
+        [clockInfo assign:timeEntry.clockOut];
+    } else {
+        [self deleteClockOut];
+    }
+    [self.managedObjectContext save:error];
+    if (nil != *error) {
+#ifndef RELEASE
+        NSLog(@"Error saving timeEntry managedObjectContext - %@ %@", (*error).localizedDescription, msg);
+#endif
+        return FALSE;
+    }
+    return TRUE;
+}
+
+- (void)updateTimeEntryForMilliseconds {
+    double milliseconds = [self calculateTotalMilliseconds];
+    if (milliseconds > 0) {
+        self.totalMilliseconds = [NSNumber numberWithDouble:milliseconds];
+    }
+}
+
+- (void)deleteClockOut {
+    if (self.clockOut) { // no date delete clockOut
+        ClockInfo* info = self.clockOut;
+        self.clockOut = nil;
+        [self.managedObjectContext deleteObject:info];
+    }
+}
+
+- (ClockInfo*)insertNewClockInfo {
+    ClockInfo* result = [self.managedObjectContext insertNewEntityForClass:[ClockInfo class]];
+    return result;
+}
+
+- (BOOL)updateTimeEntryFromDict:(NSDictionary*)dict wasModified:(BOOL*)bModified error:(NSError* __autoreleasing*)error {
+    DEBUG_MSG
+
+    NSAssert(nil != error, @"error cannot be nil in %@", msg);
+    NSAssert(nil != dict, @"dict cannot be nil in %@", msg);
+    NSAssert(nil != bModified, @"bModified cannot be nil %@", msg);
+
+    *bModified = FALSE;
+
+    NSString* timeEntryNotes = [NSString trim:[dict objectForKey:kNotesKey]];
+    if (![NSString isEquals:self.notes dest:timeEntryNotes]) {
+        self.notes = timeEntryNotes;
+        *bModified = TRUE;
+    }
+
+    NSString *clockInGpsDataStatus = [NSString trim:[dict objectForKey:kclockInGpsDataStatusKey]];
+
+    // *****************************
+    // Insert ClockInfo for Clock In
+    // *****************************
+    ClockInfo* clockInfo;
+    if (nil == self.clockIn) {
+        clockInfo = [self insertNewClockInfo];
+        NSAssert(nil != clockInfo, @"Error inserting new ClockInfo for TimeEntry %@", msg);
+        *bModified = TRUE;
+        self.clockIn = clockInfo;
+    } else {
+        clockInfo = self.clockIn;
+    }
+    if (![NSString isEquals:clockInfo.gpsDataStatus dest:clockInGpsDataStatus]) {
+        clockInfo.gpsDataStatus = clockInGpsDataStatus;
+        *bModified = TRUE;
+    }
+
+    NSString *clockInTimeStr = [NSString trim:[dict objectForKey:kclockInIso8601Key]];
+
+    // Clock out NSDate
+    NSDate* clockInDate = [clockInTimeStr toUTCDateTime];
+
+    //  clockoutDate = [timeEntryRec valueForKey:@"clockOutDate"];
+    NSString *clockOutTimeStr = [NSString trim:[dict objectForKey:kclockOutIso8601Key]];
+
+    // Clock Out NSDate
+    NSDate* clockOutDate = [clockOutTimeStr toUTCDateTime];
+
+    clockOutTimeStr = [clockOutDate toDefaultTimeString]; // h:mm:ss a
+
+    //get Location
+    NSArray *locationsArray = [dict objectForKey:klocationsKey];
+    //clear out values
+    NSString* clockInLat = @"";
+    NSString* clockInLon = @"";
+    NSString* clockOutLat = @"";
+    NSString* clockOutLon = @"";
+    NSString* latitude = nil;
+    NSString* longitude = nil;
+    NSNumber* num;
+    if (locationsArray && locationsArray.count > 0) {
+        for (NSDictionary *loc in locationsArray) {
+
+            latitude = [NSString trim:[loc objectForKey:kgpsLatitudeKey]];
+            longitude = [NSString trim:[loc objectForKey:kgpsLongitudeKey]];
+            num = [NSNumber safeNum:[loc objectForKey:kclockInLocationKey]];
+            if (num && [num boolValue]){
+                clockInLat = latitude;
+                clockInLon = longitude;
+            } else {
+                clockOutLat = latitude;
+                clockOutLon = longitude;
+            }
+        }
+    }
+
+    //if the clock out is equal to the clock in then there is no clock out
+    NSString* testClockOut = [NSString trim:[dict objectForKey:kclockOutIso8601Key]];
+    NSString* testClockIn = [NSString trim:[dict objectForKey:kclockInIso8601Key]];
+    if ([testClockOut isEqualToString:testClockIn]) {
+        clockOutTimeStr = @"";
+    }
+
+    // Clock In Information
+    NSNumber* __latitude = [NSString isNilOrEmpty:clockInLat] ? nil : [NSNumber numberWithDouble:[clockInLat doubleValue]];
+    if (__latitude && ![NSNumber isEquals:clockInfo.latitude dest:__latitude]) {
+        clockInfo.latitude = __latitude;
+        *bModified = TRUE;
+    }
+    NSNumber* __longitude = [NSString isNilOrEmpty:clockInLon] ? nil : [NSNumber numberWithDouble:[clockInLon doubleValue]];
+    if (__longitude && ![NSNumber isEquals:clockInfo.longitude dest:__longitude]) {
+        clockInfo.longitude = __longitude;
+        *bModified = TRUE;
+    }
+    if (![NSDate isEquals:clockInfo.dateTimeEntry dest:clockInDate]) {
+        clockInfo.dateTimeEntry = clockInDate;
+        *bModified = TRUE;
+    }
+
+    // Clock Out Information
+    if ([clockOutTimeStr length] > 0)
+    {
+        if (nil == self.clockOut) {
+            clockInfo = [self insertNewClockInfo];
+            NSAssert(nil != clockInfo, @"Error inserting new ClockInfo for TimeEntry %@", msg);
+            *bModified = TRUE;
+            self.clockOut = clockInfo;
+        } else {
+            clockInfo = self.clockOut;
+        }
+
+        NSString *clockOutGpsDataStatus = [NSString trim:[dict objectForKey:kclockOutGpsDataStatusKey]];
+        if (![NSString isEquals:clockInfo.gpsDataStatus dest:clockOutGpsDataStatus]) {
+            clockInfo.gpsDataStatus = clockOutGpsDataStatus;
+            *bModified = TRUE;
+        }
+        NSNumber* __latitude = [NSString isNilOrEmpty:clockOutLat] ? nil : [NSNumber numberWithDouble:[clockOutLat doubleValue]];
+        if (__latitude && ![NSNumber isEquals:clockInfo.latitude dest:__latitude]) {
+            clockInfo.latitude = __latitude;
+            *bModified = TRUE;
+        }
+        NSNumber* __longitude = [NSString isNilOrEmpty:clockOutLon] ? nil : [NSNumber numberWithDouble:[clockOutLon doubleValue]];
+        if (__longitude && ![NSNumber isEquals:clockInfo.longitude dest:__longitude]) {
+            clockInfo.longitude = __longitude;
+            *bModified = TRUE;
+        }
+        if (![NSDate isEquals:clockInfo.dateTimeEntry dest:clockOutDate]) {
+            clockInfo.dateTimeEntry = clockOutDate;
+            *bModified = TRUE;
+        }
+    } else if (self.clockOut) {
+        [self deleteClockOut];
+        *bModified = TRUE;
+    }
+
+    NSNumber* totalMilleseconds = [NSNumber safeNum:[dict objectForKey:ktotalMillisecondsKey]];
+    if (![NSNumber isNilOrNull:totalMilleseconds] && ![NSNumber isEquals:self.totalMilliseconds dest:totalMilleseconds]) {
+        self.totalMilliseconds = totalMilleseconds;
+        *bModified = TRUE;
+    } else { // Clock-In Clock Out uses millisecondsDuration not totalMilliseconds
+        totalMilleseconds = [NSNumber safeNum:[dict objectForKey:kmillisecondsDurationKey]];
+        if (![NSNumber isNilOrNull:totalMilleseconds] && ![NSNumber isEquals:self.totalMilliseconds dest:totalMilleseconds]) {
+            self.totalMilliseconds = totalMilleseconds;
+            *bModified = TRUE;
+        }
+    };
+
+    if (*bModified) {
+        [self.managedObjectContext save:error];
+        if (nil != *error) {
+            return FALSE;
+        }
+
+        [self.dayHistoryItem.managedObjectContext save:error];
+        if (nil != *error) {
+            return FALSE;
+        }
+    }
+
+    return TRUE;
+}
+
+- (double)calculateTotalMilliseconds {
+    double milleseconds = 0;
+    NSDate* clockInDate;
+    NSDate* clockOutDate;
+    if (self.clockIn && self.clockOut) {
+        clockInDate = self.clockIn.dateTimeEntry;
+        clockOutDate = self.clockOut.dateTimeEntry;
+        milleseconds = [clockOutDate timeIntervalSinceDate:clockInDate];
+    }
+    return milleseconds * 1000;
+}
+
+- (void)updateTimeEntryFromDict:(NSDictionary *)dict clockMode:(ClockMode)clockMode {
+    DEBUG_MSG
+    NSAssert(nil != dict, @"dict cannot be nil %@", msg);
+    ClockInfo* clockInfo = nil;
+    switch (clockMode) {
+        case ClockModeIn: {
+            if (nil == self.clockIn) {
+                self.clockIn = [self insertNewClockInfo];
+            }
+            clockInfo = self.clockIn;
+            break;
+        }
+        case ClockModeOut: {
+            if (nil == self.clockOut) {
+                self.clockOut = [self insertNewClockInfo];
+            }
+            clockInfo = self.clockOut;
+            break;
+        }
+        default:
+            break;
+    }
+    NSAssert(nil != clockInfo, @"clockInfo cannot be nil %@", msg);
+    [clockInfo updateFromDict:dict];
+    [self updateTimeEntryForMilliseconds];
+}
+
+- (NSMutableDictionary*)saveToDictForSubmissionForClockMode:(ClockMode)clockInOrOut {
+    NSMutableDictionary* dict = [NSMutableDictionary new];
+
+    [dict setValue:[NSNumber numberWithInt:(int)clockInOrOut] forKey:kclockModeKey];
+    ClockInfo* clockInfo;
+    switch (clockInOrOut) {
+        case ClockModeIn:
+            clockInfo = self.clockIn;
+            break;
+        case ClockModeOut:
+            clockInfo = self.clockOut;
+            break;
+        default:
+            break;
+    }
+    if (nil == clockInfo) {
+        return nil;
+    }
+    [clockInfo saveToDictForClockSubmission:dict isClockIn:(clockInOrOut == ClockModeIn)];
+    return dict;
+}
+
+- (void)saveToDictForCreateSubmission:(NSMutableDictionary *)dict {
+    DEBUG_MSG
+    NSAssert(nil != dict, @"dict cannot be nil %@", msg);
+
+    if (![NSString isNilOrEmpty:self.notes]) {
+        [dict setValue:self.notes forKey:kNotesKey];
+    }
+
+    if (self.clockIn) {
+        [self.clockIn saveToDictForCreateSubmission:dict isClockIn:TRUE];
+    }
+    if (self.clockOut) {
+        [self.clockOut saveToDictForCreateSubmission:dict isClockIn:FALSE];
+    }
+}
+
+- (void)saveToDictForUpdateSubmission:(NSMutableDictionary*)dict {
+    DEBUG_MSG
+    NSAssert(nil != dict, @"dict cannot be nil %@", msg);
+
+    if (![NSString isNilOrEmpty:self.notes]) {
+        [dict setValue:self.notes forKey:kNotesKey];
+    }
+
+    if (self.clockIn) {
+        [self.clockIn saveToDictForCreateSubmission:dict isClockIn:TRUE];
+
+    }
+    if (self.clockOut) {
+        [self.clockOut saveToDictForCreateSubmission:dict isClockIn:FALSE];
+    }
+}
+
+- (DBStatus)getDBStatus {
+    NSNumber* numStatus = self.status;
+    if ([NSNumber isNilOrNull:numStatus]) {
+        return dsUpdated;
+    }
+    NSInteger value = [numStatus integerValue];
+    return (DBStatus)value;
+}
+
+- (void)setDBStatus:(DBStatus)value {
+    NSNumber* num = [NSNumber numberWithInt:(int)value];
+    self.status = num;
+}
+
+/*dsUpdated = 0,       // Is updated from a web standpoint
+ dsPendingDelete = 1, // Pending Delete from the TimeSheetDetailViewController
+ dsPendingCreate = 2, // Pending Create from the AddTimeEntryViewController
+ dsPendingInsert = 3, // Pending Insert from the EmployeeProfileViewController
+ dsPendingUpdate = 4, // Pending Update hasn't been updated from a web standpoint*/
+
+- (NSString*)getDBStatusString {
+    DBStatus __status = [self getDBStatus];
+    switch(__status) {
+        case dsPendingInsert:
+            return @"dsPendingInsert";
+        case dsPendingCreate:
+            return @"dsPendingCreate";
+        case dsPendingUpdate:
+            return @"dsPendingUpdate";
+        case dsPendingDelete:
+            return @"dsPendingDelete";
+        default:
+            return @"dsUpdated";
+    }
+}
+
+- (BOOL)hasPendingUpdates {
+    DBStatus __status = [self getDBStatus];
+    if (__status != dsUpdated) {
+        return TRUE;
+    }
+    if (self.clockIn) {
+        __status = [self.clockIn getDBStatus];
+        if (__status != dsUpdated) {
+            return TRUE;
+        }
+    }
+    if (self.clockOut) {
+        __status = [self.clockOut getDBStatus];
+        if (__status != dsUpdated) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+- (BOOL)isNeedingSubmission {
+    // entryID is not valid meaning it's null or zero (default) then
+    // it hasn't been submitted to the server
+    BOOL bIsTimeEntryIDValid = [self isTimeEntryIDValid];
+    BOOL bHasPendingUpdates = [self hasPendingUpdates];
+    if (!bIsTimeEntryIDValid || bHasPendingUpdates) {
+        return TRUE;
+    }
+    return FALSE;
+}
+
+- (void)updateDBStatusAndDBStatusForClockMode:(DBStatus)aStatus clockMode:(ClockMode)clockMode {
+    switch (clockMode) {
+        case ClockModeIn: {
+            if (self.clockIn) {
+                [self.clockIn setDBStatus:aStatus];
+            }
+            // Only set status if clockOut doesn't exist or
+            // it's the same as the status coming in
+            if (self.clockOut) {
+                if ([self.clockOut getDBStatus] == aStatus) {
+                    [self setDBStatus:aStatus];
+                }
+            } else {
+                [self setDBStatus:aStatus];
+            }
+            break;
+        }
+        case ClockModeOut: {
+            if (self.clockOut) {
+                [self.clockOut setDBStatus:aStatus];
+            }
+            // Only set status if clockIn doesn't exist or
+            // it's the same as the status coming in
+            if (self.clockIn) {
+                if ([self.clockIn getDBStatus] == aStatus) {
+                    [self setDBStatus:aStatus];
+                }
+            } else {
+                [self setDBStatus:aStatus];
+            }
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+- (void)updateDBStatus:(DBStatus)aStatus {
+    [self setDBStatus:aStatus];
+    if (self.clockIn) {
+        [self.clockIn setDBStatus:aStatus];
+    }
+    if (self.clockOut) {
+        [self.clockOut setDBStatus:aStatus];
+    }
+}
+
+- (BOOL)isTimeEntryIDValid {
+    NSNumber* __timeEntryID = self.timeEntryID;
+    BOOL bIsTimeEntryIDValid = ![NSNumber isNilOrNull:__timeEntryID] && ([__timeEntryID integerValue] > 0);
+    return bIsTimeEntryIDValid;
+}
+
+@end

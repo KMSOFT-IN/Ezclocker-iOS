@@ -1,0 +1,60 @@
+//
+//  NSData+Extensions.m
+//  ezClocker
+//
+//  Created by Kenneth Lewis on 1/11/16.
+//  Copyright © 2016 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "NSData+Extensions.h"
+#import "NSString+Extensions.h"
+#import "debugdefines.h"
+#import "CommonLib.h"
+#import "MetricsLogWebService.h"
+
+@implementation NSData (NSDataExtensions)
+
++ (void)checkData:(NSData*)data withCompletion:(ServerResponseCompletionBlock)completion {
+    DEBUG_MSG
+    NSAssert(nil != completion, @"completion cannot be nil %@", msg);
+    NSError* error = nil;
+    NSDictionary *results = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
+
+    //sometimes we get a json object (usually when something goes wrong) and other times we get an array of time entries
+    NSString* JSONStr = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"";
+
+#ifndef RELEASE
+    NSLog(@"JSONStr result is %@", JSONStr);
+#endif
+
+    if([JSONStr hasPrefix:@"{"]){
+
+        NSString *resultMessage = [results valueForKey:@"message"];
+
+        NSInteger errorValue = [[results valueForKey:@"errorCode"] intValue];
+
+        if (([resultMessage isEqual:[NSNull null]]) ||
+            ((![resultMessage isEqualToString:@"Success"]) && (![resultMessage isEqualToString:@"false"]) && (![resultMessage isEqualToString:@"true"]))){
+            if (errorValue == SERVICE_ERRORCODE_SUCCESSFUL) {
+                errorValue = SERVICE_ERRORCODE_UNKNOWN_ERROR;
+            }
+            if ([NSString isNilOrEmpty:resultMessage]) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    completion(errorValue, nil, nil, error);
+                });
+                return;
+            }
+            else {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    completion(errorValue, resultMessage, nil, error);
+                });
+                return;
+            }
+        }
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        completion(SERVICE_ERRORCODE_SUCCESSFUL, nil, results, nil);
+    });
+}
+
+@end

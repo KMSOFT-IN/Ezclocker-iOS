@@ -1,0 +1,299 @@
+//
+//  EmailTimeSheetViewController.m
+//  Created by Raya Khashab on 10/6/13.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "EmailTimeSheetViewController.h"
+#import "user.h"
+#import <QuartzCore/QuartzCore.h>
+#import "CommonLib.h"
+#import "Mixpanel.h"
+
+@interface EmailTimeSheetViewController ()
+
+@end
+
+@implementation EmailTimeSheetViewController
+
+@synthesize MessageTextView = _MessageTextView;
+@synthesize MessageLabel;
+@synthesize EmailTextEdit = EmailTextEdit;
+@synthesize SubjectLabel = _SubjectLabel;
+@synthesize delegate = _delegate;
+@synthesize startDate;
+@synthesize endDate;
+@synthesize employeeID;
+
+- (id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
+
+{
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    if (self) {
+        // Custom initialization
+        startDate = @"";
+        endDate = @"";
+    }
+    return self;
+}
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    //create a TextView inside TextField to get the border around it
+
+    //put a borde on the text field
+    _MessageTextView.text = @"";
+    CALayer *imageLayer = _MessageTextView.layer;
+    [imageLayer setCornerRadius:10];
+    [imageLayer setBorderWidth:2.1];
+    imageLayer.borderColor=[[UIColor lightGrayColor] CGColor];
+
+    EmailTextEdit.delegate = self;
+    [EmailTextEdit setReturnKeyType:UIReturnKeyDone];
+    
+    [self registerForKeyboardNotifications];
+
+
+
+}
+
+- (void)viewWillAppear:(BOOL)animated
+{
+	[super viewWillAppear: animated];
+    _submitBtn.hidden = YES;
+    //show the string that got passed to us
+    _SubjectLabel.text = [NSString stringWithFormat:@"%@ - %@ Time Sheet", startDate, endDate];
+    [_scrollView setScrollEnabled:YES];
+    [_scrollView setContentSize:CGSizeMake(320, 650)];
+    _scrollView.backgroundColor = UIColorFromRGB(GRAY_BACKGROUND_COLOR);
+
+    UIBarButtonItem* sendButton = [[UIBarButtonItem alloc] initWithTitle:@"Send" style:UIBarButtonItemStylePlain target:self action:@selector(sendButtonAction)];
+    
+    
+    self.navigationItem.rightBarButtonItem = sendButton;
+
+    NSDictionary *navbarTitleTextAttributes = [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [UIColor whiteColor],
+                                               NSForegroundColorAttributeName,
+                                               nil];
+    [self.navigationController.navigationBar setTitleTextAttributes:navbarTitleTextAttributes];
+
+    [self removeKeyboard];
+
+    
+}
+
+
+- (void)didReceiveMemoryWarning
+{
+    [super didReceiveMemoryWarning];
+    // Dispose of any resources that can be recreated.
+}
+
+- (void)viewDidUnload {
+    [self setEmailTextEdit:nil];
+    [self setSubjectLabel:nil];
+    [self setMessageTextView:nil];
+    [self setMessageLabel:nil];
+    [super viewDidUnload];
+}
+// Call this method somewhere in your view controller setup code.
+- (void)registerForKeyboardNotifications
+{
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(keyboardWasShown:)
+                                                 name:UIKeyboardDidShowNotification object:nil];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(keyboardWillBeHidden:)
+                                                 name:UIKeyboardWillHideNotification object:nil];
+    
+}
+
+// Called when the UIKeyboardDidShowNotification is sent.
+- (void)keyboardWasShown:(NSNotification*)aNotification
+{
+    NSDictionary* info = [aNotification userInfo];
+    CGSize kbSize = [[info objectForKey:UIKeyboardFrameBeginUserInfoKey] CGRectValue].size;
+    
+    UIEdgeInsets contentInsets = UIEdgeInsetsMake(0.0, 0.0, kbSize.height, 0.0);
+    _scrollView.contentInset = contentInsets;
+    _scrollView.scrollIndicatorInsets = contentInsets;
+    
+    // If active text field is hidden by keyboard, scroll it so it's visible
+    // Your app might not need or want this behavior.
+    CGRect aRect = self.view.frame;
+    aRect.size.height -= kbSize.height;
+    if (!CGRectContainsPoint(aRect, _MessageTextView.frame.origin) ) {
+        [self.scrollView scrollRectToVisible:_MessageTextView.frame animated:YES];
+    }
+}
+
+// Called when the UIKeyboardWillHideNotification is sent
+- (void)keyboardWillBeHidden:(NSNotification*)aNotification
+{
+    UIEdgeInsets contentInsets = UIEdgeInsetsZero;
+    _scrollView.contentInset = contentInsets;
+    _scrollView.scrollIndicatorInsets = contentInsets;
+}
+
+
+-(void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response
+{
+    if ([response isKindOfClass: [NSHTTPURLResponse class]]) {
+        int statusCode = [(NSHTTPURLResponse*) response statusCode];
+        if (statusCode == SERVICE_UNAVAILABLE_ERROR){
+            [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+            
+            //error 503 is when tomcat is down
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+        }
+    }
+    
+    
+    data = [[NSMutableData alloc] init];
+}
+-(void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)dataIn
+{
+    [data appendData:dataIn];
+}
+
+-(void)connectionDidFinishLoading:(NSURLConnection *)connection
+{
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+
+    //do nothing with the data since we don't want to wait for it to go through or not
+/*    NSError *error = nil;
+    UIAlertView *alert;
+    NSDictionary *results = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
+    NSString *resultMessage = [results valueForKey:@"message"];
+    if (![resultMessage isEqualToString:@"Success"])
+    {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Failure to Add" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+    }
+  */  
+}
+
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error
+{
+    // release the connection, and the data object
+    // receivedData is declared as a method instance elsewhere
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+    
+    [alert show];
+    
+    connection = nil;
+    data = nil;
+}
+
+-(void) emailTimeSheet{
+    UserClass *user = [UserClass getInstance];
+    
+    //log to mixpanel if we are production
+    if ([CommonLib isProduction])
+    {
+        Mixpanel *mixpanel = [Mixpanel sharedInstance];
+        
+        [mixpanel track:@"Email TimeSheet" properties:@{ @"email": user.userEmail}];
+    }
+
+    UIAlertView *alert;
+    NSString *httpPostString;
+    NSString *request_body;
+    NSString *userEmployerID = [NSString stringWithFormat:@"%@", user.employerID];
+    NSTimeZone *timeZone = [NSTimeZone localTimeZone];
+    NSString *timeZoneId = timeZone.name;
+   // ProgramConstants.SERVER_URL + "/email/csvReport/" + employerID + "/" + employeeID;
+    httpPostString = [NSString stringWithFormat:@"%@email/csvReport/%@/%@", SERVER_URL, userEmployerID, employeeID];
+    
+
+    NSString *subjectLine = [NSString stringWithFormat:@"%@ for %@", _SubjectLabel.text, _fromTextField.text];
+                             
+    request_body = [NSString
+                    stringWithFormat:@"authToken=%@&timeZoneId=%@&startDate=%@&endDate=%@&toEmail=%@&subject=%@&message=%@&employeeName=%@",
+                    [user.authToken        stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [timeZoneId     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [startDate     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [endDate     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [EmailTextEdit.text     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [subjectLine     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                    [_MessageTextView.text     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                     [_fromTextField.text     stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding
+                     ]];
+    
+    
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    
+    //set HTTP Method
+    [urlRequest setHTTPMethod:@"POST"];
+    
+    //set request body into HTTPBody.
+    [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    if (connection)
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = YES;
+    else {
+        alert = [[UIAlertView alloc] initWithTitle:nil message:@"Connection to the server failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+        
+    }
+    
+    
+}
+
+-(void) sendEmail{
+    if (![CommonLib validateEmail:EmailTextEdit.text])
+    {
+        UIAlertView  *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Please enter a valid email address" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+        
+    }
+    else{
+        //call webservice to send the email
+        [self emailTimeSheet];
+        //send message back to the delegate to close the view since we don't care to wait and check if the mail got sent or not
+        [self.delegate emailTimeSheetViewControllerDidFinish:self];
+        
+        
+    }
+
+}
+
+-(void) sendButtonAction{
+    [self sendEmail];
+}
+
+
+
+- (IBAction)doSubmitEmail:(id)sender {
+    [self sendEmail];
+}
+
+
+-(void)removeKeyboard{
+    [EmailTextEdit resignFirstResponder];
+    [_MessageTextView resignFirstResponder];
+}
+
+
+
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    [self removeKeyboard];
+    return YES;
+}
+
+
+
+- (IBAction)doCancel:(id)sender {
+    [self.delegate emailTimeSheetViewControllerDidFinish:self];
+
+}
+@end

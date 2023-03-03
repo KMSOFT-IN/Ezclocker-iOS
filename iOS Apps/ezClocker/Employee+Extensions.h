@@ -1,0 +1,48 @@
+//
+//  Employee+Extensions.h
+//  ezClocker
+//
+//  Created by Kenneth Lewis on 12/15/15.
+//  Copyright © 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "Employee.h"
+#import "TimeEntry.h"
+#import "DeletedTimeEntry.h"
+
+#define kEmployeeIDKey @"employeID"
+#define kEmployeeNameKey @"emplyeeName"
+#define kEmployeeEmailKey @"employeeEmail"
+
+@interface Employee (EmployeeExtensions)
+
+- (DayHistoryItem*)insertNewDayHistoryItem;
+
+- (DeletedTimeEntry*)insertNewDeleteTimeEntry;
+- (NSMutableArray*)fetchDeletedTimeEntries:(NSError *__autoreleasing *)error;
+- (DeletedTimeEntry*)fetchDeletedTimeEntry:(NSNumber*)timeEntryID error:(NSError*__autoreleasing*)error;
+- (BOOL)deleteTimeEntryFromDeletedTimeEntries:(NSNumber*)timeEntryID error:(NSError*__autoreleasing*)error;
+
+//- (void)addDayHistoryItemForDictionary:(NSDictionary*)dict;
+
+- (NSArray*)fetchHistoryItems:(NSError*__autoreleasing*)error;
+
+- (TimeEntry*)fetchTimeEntryByID:(NSInteger)timeEntryID error:(NSError *__autoreleasing *)error;
+- (TimeEntry*)fetchTimeEntryByObjectID:(NSManagedObjectID*)timeEntryObjectID error:(NSError *__autoreleasing *)error;
+- (DayHistoryItem*)fetchDayHistoryItemByObjectID:(NSManagedObjectID*)dayHistoryItemObjectID error:(NSError*__autoreleasing*)error;
+
+- (NSMutableArray*)fetchTimeEntriesNeedingSubmission:(NSError*__autoreleasing*)error;
+
+- (DayHistoryItem*)fetchTodaysDayHistoryItem:(NSError* __autoreleasing*)error;
+- (DayHistoryItem*)fetchHistoryItemByDate:(NSDate*)date error:(NSError *__autoreleasing *)error;
+
+- (TimeEntry*)fetchLastTimeEntryForToday:(NSError *__autoreleasing *)error;
+- (TimeEntry*)fetchMostRecentTimeEntry:(NSError*__autoreleasing*)error;
+- (TimeEntry*)fetchMostRecentNormalTimeEntry:(NSError*__autoreleasing*)error;
+
+- (TimeEntry*)saveNewClockInfo:(NSDictionary*)dict currentTimeEntry:(TimeEntry*)currentTimeEntry error:(NSError* __autoreleasing*)error;
+- (TimeEntry*)createNewTimeEntry:(NSDictionary*)dict error:(NSError* __autoreleasing*)error;
+
+- (BOOL)removeDayHistoryItem:(DayHistoryItem*)dayHistoryItem error:(NSError*__autoreleasing*)error;
+
+@end

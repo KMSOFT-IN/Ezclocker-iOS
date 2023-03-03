@@ -1,0 +1,45 @@
+//
+//  RemindersViewController.h
+//  ezClocker
+//
+//  Created by Raya Khashab on 04/04/14.
+//  Copyright (c) 2014 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import "user.h"
+#import "AddReminderViewController.h"
+@class RemindersViewController;
+
+
+@protocol RemindersViewControllerDelegate
+- (void)remindersViewControllerDidFinish:(RemindersViewController *)controller;
+@end
+
+@interface RemindersViewController : UIViewController <UITextFieldDelegate, addReminderViewControllerDelegate> {
+    UIDatePicker *theDatePicker;
+    UIToolbar* pickerToolbar;
+    UIActionSheet* pickerViewDate;
+    int TextFieldMode;
+    int curClockMode;
+    BOOL editingEnabled;
+    NSDateFormatter *formatterDateTime12, *formatterTime;
+
+}
+
+- (IBAction)revealMenu:(id)sender;
+
+@property (weak, nonatomic) IBOutlet UILabel *noClockOutLabel;
+@property (weak, nonatomic) IBOutlet UITableView *clockInTable;
+@property (weak, nonatomic) IBOutlet UITableView *clockOutTabel;
+
+- (IBAction)doEditCell:(id)sender;
+@property (weak, nonatomic) IBOutlet UIBarButtonItem *editButton;
+@property (weak, nonatomic) IBOutlet UIPickerView *locationPicker;
+@property (weak, nonatomic) IBOutlet UILabel *noClockInLabel;
+- (IBAction)doClearAllReminders:(id)sender;
+@property (assign, nonatomic) IBOutlet id <RemindersViewControllerDelegate> delegate;
+- (IBAction)doAddClockInReminder:(id)sender;
+- (IBAction)doAddClockOutReminder:(id)sender;
+
+@end

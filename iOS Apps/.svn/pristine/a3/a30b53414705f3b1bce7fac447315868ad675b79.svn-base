@@ -1,0 +1,352 @@
+//
+//  ClockWebServices.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 11/5/15.
+//  Copyright © 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <Foundation/Foundation.h>
+#import "ClockWebServices.h"
+#import "CommonLib.h"
+
+#import <QuartzCore/QuartzCore.h>
+
+#import "user.h"
+
+#import "ECSlidingViewController.h"
+
+#import "MenuViewController.h"
+
+//#import "Mixpanel.h"
+
+#import "CommonLib.h"
+#import "MetricsLogWebService.h"
+#import "TimeEntry+Extensions.h"
+#import "NSString+Extensions.h"
+#import "NSDate+Extensions.h"
+#import "debugdefines.h"
+#import "DataManager.h"
+#import "SharedUICode.h"
+#import "NSDictionary+Extensions.h"
+
+@implementation ClockWebServices
+
+- (void) callTCSWebService:(ClockMode) clockMode dateTime:(NSDate*) currentDateTime employeeID: (NSNumber*) selEmployeeID locOverride:(bool) bOverrideLocationCheck{
+#ifndef PERSONAL_VERSION
+    CLLocation *loc = [LocationManager defaultLocationManager].lastKnownLocation;
+#else
+    CLLocation* loc = nil;
+#endif
+    DataManager* manager = [DataManager sharedManager];
+    [manager clockInOrClockOut:clockMode currentDate:currentDateTime location:loc source:kIPHONE locOverride:bOverrideLocationCheck withCompletion:^(NSInteger errorCode, NSString * _Nullable resultMessage, NSDictionary * _Nullable results, NSError * _Nullable error) {
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+        switch (errorCode) {
+            case DATAMANAGER_BUSY: {
+                [SharedUICode displayServerIsBusy];
+                [self.delegate clockServiceCallDidFinish:self timeEntryRec:nil ErrorCode:DATAMANAGER_BUSY ClockMode:clockMode];
+                return;
+            }
+            case SERVICE_UNAVAILABLE_ERROR: {
+                [SharedUICode displayServiceUnavailableErrorWithMsg:@"NOTE: You can continue to clock in/clock out and we will save to the server later."];
+                
+                [self.delegate clockServiceCallDidFinish:self timeEntryRec:results ErrorCode:SERVICE_UNAVAILABLE_ERROR ClockMode:clockMode];
+                return;
+            }
+            case SERVICE_ERRORCODE_ALREADY_CLOCKED_IN: {
+                [SharedUICode messageBox:@"" message:@"You are already clocked in.  Please clock out." withCompletion:^{
+                    [self.delegate clockServiceCallDidFinish:self timeEntryRec:results ErrorCode:SERVICE_ERRORCODE_ALREADY_CLOCKED_IN ClockMode:clockMode];
+                }];
+                return;
+            }
+            case SERVICE_ERRORCODE_ALREADY_CLOCKED_OUT: {
+                [SharedUICode messageBox:@"" message:@"You are already clocked out." withCompletion:^{
+                    [self.delegate clockServiceCallDidFinish:self timeEntryRec:results ErrorCode:SERVICE_ERRORCODE_ALREADY_CLOCKED_OUT ClockMode:clockMode];
+                }];
+                return;
+            }
+            case SERVICE_ERRORCODE_SUCCESSFUL: {
+                NSDictionary *timeEntryRec = [results valueForKey:ktimeEntryKey];
+                if ([NSDictionary isNilOrNull:timeEntryRec]) {
+                    timeEntryRec = nil;
+                    //Should we set this to nil?
+                    //user.activeTimeEntryId = nil;
+                } else {
+                    NSNumber *timeEntryId = [timeEntryRec valueForKey:kidKey];
+                    UserClass *user = [UserClass getInstance];
+                    user.activeTimeEntryId = timeEntryId;
+                }
+                [self.delegate clockServiceCallDidFinish:self timeEntryRec:timeEntryRec ErrorCode:SERVICE_ERRORCODE_SUCCESSFUL ClockMode:clockMode];
+                return;
+            }
+            default: { // If no resultMessage then we will display please try again
+                if ([NSString isNilOrEmpty:resultMessage]) {
+                    [SharedUICode messageBox:nil message:@"The App was not able to connect to the ezClocker cloud.  Please try again." withCompletion:^{
+                        [self.delegate clockServiceCallDidFinish:self timeEntryRec:nil ErrorCode:(int)errorCode ClockMode:clockMode];
+                    }];
+                } else { // otherwise display the message from the server
+                    [SharedUICode checkResultsMessageAndDisplayError:resultMessage error:error];
+                    [self.delegate clockServiceCallDidFinish:self timeEntryRec:results ErrorCode:(int)errorCode ClockMode:clockMode];
+                }
+                break;
+            }
+        }
+        return;
+    }];
+    
+}
+/*
+    //   NSString *currentDateTime = self.getCurrentDateTime;
+    UserClass *user = [UserClass getInstance];
+    UIAlertView *alert;
+    formatterISO8601DateTime = [[NSDateFormatter alloc] init];
+    [formatterISO8601DateTime setDateFormat:@"yyyy-MM-dd'T'HH:mm:ssZ"];
+    formatterDateTime12hr = [[NSDateFormatter alloc] init];
+    formatterTime = [[NSDateFormatter alloc] init];
+    [formatterTime setDateFormat:@"h:mm:ss a"];
+    [formatterDateTime12hr setDateFormat:@"MM/dd/yyyy h:mm:ss a"];
+    
+    //[formatterDateTime setTimeZone:[NSTimeZone timeZoneForSecondsFromGMT:-18000]];
+    
+    //set time zones
+    [formatterISO8601DateTime setTimeZone:[NSTimeZone localTimeZone]];
+    [formatterDateTime12hr setTimeZone:[NSTimeZone localTimeZone]];
+    [formatterTime setTimeZone:[NSTimeZone localTimeZone]];
+
+    
+    NSString *httpPostString;
+    NSString *request_body;
+    [formatterISO8601DateTime setTimeZone:[NSTimeZone timeZoneWithName:@"UTC"]];
+    NSString *strCurrentDateTime = [formatterISO8601DateTime stringFromDate:currentDateTime];
+    strCurrentDateTime  = [strCurrentDateTime stringByReplacingOccurrencesOfString:@"+0000" withString:@"Z"];
+    strCurrentDateTime  = [strCurrentDateTime stringByReplacingOccurrencesOfString:@"-0000" withString:@"Z"];
+    
+    //for some reason once in a while we get p.m. in the string which casues all sort of errors so take it out
+    strCurrentDateTime = [strCurrentDateTime stringByReplacingOccurrencesOfString:@" p.m." withString:@""];
+    strCurrentDateTime = [strCurrentDateTime stringByReplacingOccurrencesOfString:@" p. m." withString:@""];
+    strCurrentDateTime = [strCurrentDateTime stringByReplacingOccurrencesOfString:@" a.m." withString:@""];
+
+    
+    NSTimeZone *timeZone = [NSTimeZone localTimeZone];
+    NSString *timeZoneId = timeZone.name;
+    NSString *source = kIPHONE;
+    //pass the person that did the clock in/out if we don't know the name then pass the email
+    NSString *modifiedBy = user.employerName;
+
+    if ([modifiedBy isEqualToString :@"" ]) {
+        modifiedBy = user.userEmail;
+    }
+
+    NSString *gpsStatus = kACTIVE;
+    if ([CLLocationManager authorizationStatus] == kCLAuthorizationStatusDenied)
+        gpsStatus = kDISABLED;
+
+
+        //check if we are doing a clockIn or clockOut
+        if (clockMode == ClockModeIn)
+        {
+            httpPostString = [NSString stringWithFormat:@"%@timeEntry/clockIn/%@/%@", SERVER_URL, user.employerID, selEmployeeID];
+            request_body = [NSString
+                            stringWithFormat:@"authToken=%@&clockInISO8601Utc=%@&timeZoneId=%@&source=%@",
+                            [user.authToken   stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                            [strCurrentDateTime  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                            [timeZoneId  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                            [source  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]
+                            ];
+        }
+        else {
+            httpPostString = [NSString stringWithFormat:@"%@timeEntry/clockOut/%@/%@", SERVER_URL, user.employerID, selEmployeeID];
+            //Implement request_body for send request here authToken and clock DateTime set into the body.
+            request_body = [NSString
+                            stringWithFormat:@"authToken=%@&clockOutISO8601Utc=%@&timeZoneId=%@&source=%@",
+                            [user.authToken        stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                            [strCurrentDateTime        stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                            [timeZoneId  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding],
+                            [source  stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]
+                            ];
+        }
+    
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:httpPostString]];
+    
+    //set HTTP Method
+    [urlRequest setHTTPMethod:@"POST"];
+    
+    //set request body into HTTPBody.
+    [urlRequest setHTTPBody:[request_body dataUsingEncoding:NSUTF8StringEncoding]];
+    
+    //set request url to the NSURLConnection
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:urlRequest  delegate:self startImmediately:YES];
+    if (connection)
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = YES;
+        else {
+            alert = [[UIAlertView alloc] initWithTitle:nil message:@"Connection to the server failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+
+            [self.delegate clockServiceCallDidFinish:self timeEntryRec:nil ErrorCode: 3 ClockMode: clockModeFlag];
+        }
+    
+}
+
+
+-(void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response
+{
+    if ([response isKindOfClass: [NSHTTPURLResponse class]]) {
+        int statusCode = (int)[(NSHTTPURLResponse*) response statusCode];
+        if (statusCode == SERVICE_UNAVAILABLE_ERROR){
+//            [self stopSpinner];
+ //           [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+            
+            //error 503 is when tomcat is down
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+            [self.delegate clockServiceCallDidFinish:self timeEntryRec:nil ErrorCode: 3 ClockMode: clockModeFlag];
+        }
+    }
+    
+    
+    data = [[NSMutableData alloc] init];
+}
+-(void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)dataIn
+{
+    [data appendData:dataIn];
+}
+
+-(void)connectionDidFinishLoading:(NSURLConnection *)connection
+{
+    @try {
+        UIAlertView *alert;
+        NSError *error = nil;
+        UserClass *user = [UserClass getInstance];
+        NSDictionary *results = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
+        
+        
+        NSString *resultMessage = [results valueForKey:@"message"];
+        int errorValue = [[results valueForKey:@"errorCode"] intValue];
+        
+/*#ifndef PERSONAL_VERSION
+        if (errorValue == WEB_SERVICE_OUT_OF_RANGE_ERROR) {
+            //outside of clock in/out range  prompt for override
+            [self promptForOverride:resultMessage];
+            return;
+        }
+#endif
+  */
+   /*     //if message is null or <> Success then the call failed
+        if (([resultMessage isEqual:[NSNull null]]) || (![resultMessage isEqualToString:@"Success"])){
+            if ([resultMessage isEqual:[NSNull null]])
+            {
+                alert = [[UIAlertView alloc] initWithTitle:nil message:@"Time Entry from Server Failed" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+                [alert show];
+            }
+            
+            else{
+                [MetricsLogWebService LogException: [NSString stringWithFormat:@"Error from ClockWebServices.m JSON Parsing Error= %@ resultMessage= %@", error.localizedDescription, resultMessage]];
+                if (resultMessage.length > 0)
+                {
+                    alert = [[UIAlertView alloc] initWithTitle:nil message:resultMessage delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+                    [alert show];
+                }
+                
+            }
+            //pass back to the call back that there was an error if we didn't get one from the server
+            if (errorValue == 0)
+                errorValue = 3;
+
+            [self.delegate clockServiceCallDidFinish:self timeEntryRec:nil ErrorCode:errorValue ClockMode:clockModeFlag];
+        }
+        else{
+            NSDictionary *timeEntryRec = [results valueForKey:@"timeEntry"];
+            if ([NSDictionary isNilOrNull:timeEntryRec]) {
+                timeEntryRec = nil;
+                //Should we set this to nil?
+                //user.activeTimeEntryId = nil;
+            } else {
+                NSNumber *timeEntryId = [timeEntryRec valueForKey:@"id"];
+                user.activeTimeEntryId = timeEntryId;
+            }
+            
+            [self.delegate clockServiceCallDidFinish:self timeEntryRec:timeEntryRec ErrorCode:0 ClockMode:clockModeFlag];
+
+        }
+
+            //if error code = 1 that means that person has already clocked in from the website so
+/*            if (errorValue  == 1){
+
+//                [self enableButton:clockOutBtn];
+ //               [self disableButton:clockInBtn];
+                user.currentClockMode = ClockModeOut;
+                strLastClockInTime = @"";
+            }
+            //if error code = 2 that means that person has already clocked out from the website so
+            else if (errorValue  == 2){
+  //              [self enableButton:clockInBtn];
+  //              [self disableButton:clockOutBtn];
+                user.currentClockMode = ClockModeIn;
+                strLastClockOutTime = @"";
+                
+            }
+ 
+            
+        }
+        else {
+            NSDictionary *timeEntry = [results valueForKey:@"timeEntry"];
+            if ([timeEntry count] != 0)
+            {
+                user.activeTimeEntryId = [timeEntry valueForKey:@"id"];
+                if (user.currentClockMode == ClockModeIn)
+                {
+                    strLastClockInTime = [formatterDateTime12hr stringFromDate:lastClockInTime];
+                    strLastClockOutTime = @"";
+                    user.lastClockIn = strLastClockInTime;
+                    user.lastClockOut = strLastClockOutTime;
+                    //log to mixpanel if we are production
+                    if ([CommonLib isProduction])
+                    {
+//                        Mixpanel *mixpanel = [Mixpanel sharedInstance];
+//                        [mixpanel track:@"Employee Clockin" properties:@{ @"email": user.userEmail}];
+                    }
+                    
+                    
+                }
+                else
+                {
+                    strLastClockOutTime = [formatterDateTime12hr stringFromDate:lastClockOutTime];
+                    user.lastClockOut = strLastClockOutTime;
+                }
+                //[timeEntry valueForKey:@"clockInString"];
+                //[timeEntry valueForKey:@"clockOutString"];
+ //               [self updateUI];
+            }
+ 
+        }*/
+/*
+    }//try
+
+    @finally{
+//        bOverrideLocationCheck = NO;//reset
+        [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+ //       [self stopSpinner];
+    }
+}
+
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error
+{
+    // release the connection, and the data object
+    // receivedData is declared as a method instance elsewhere
+    [UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+//    [self stopSpinner];
+    
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"ezClocker is unable to connect to the server at this time. Please try again later" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+    
+    [alert show];
+    
+    connection = nil;
+    data = nil;
+    //call the callback so we can stop the spinner
+    
+    [self.delegate clockServiceCallDidFinish:self timeEntryRec:nil ErrorCode:3 ClockMode:clockModeFlag];
+
+}
+*/
+
+@end

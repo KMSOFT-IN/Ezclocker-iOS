@@ -1,0 +1,33 @@
+//
+//  AddReminderViewController.h
+//  ezClocker
+//
+//  Created by Raya Khashab on 4/9/14.
+//  Copyright (c) 2014 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import "Reminder.h"
+#import "CommonLib.h"
+
+@protocol addReminderViewControllerDelegate
+- (void)addReminderViewControllerDidFinish:(UIViewController *)controller reminder:(Reminder *) newReminder clockMode: (int) clockMode;
+@end
+
+
+@interface AddReminderViewController : UIViewController<UITableViewDelegate>
+{
+    NSArray *weekdays;
+    NSDateFormatter *formatterDateTime12, *formatterDateTime;
+}
+
+@property (assign, nonatomic) IBOutlet id <addReminderViewControllerDelegate> delegate;
+
+- (IBAction)doCancel:(id)sender;
+- (IBAction)doSave:(id)sender;
+@property (weak, nonatomic) IBOutlet UINavigationItem *reminderNavigationItem;
+@property (weak, nonatomic) IBOutlet UIDatePicker *timePicker;
+@property (weak, nonatomic) IBOutlet UITableView *repeatDaysTable;
+@property (nonatomic, assign) ClockMode curClockMode;
+
+@end

@@ -1,0 +1,403 @@
+//
+//  AddTimeEntryViewController.m
+//  TCS Mobile
+//
+//  Created by Raya Khashab on 11/10/12.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "AddTimeEntryViewController.h"
+#import "user.h"
+#import "CommonLib.h"
+#import "Mixpanel.h"
+#import "MetricsLogWebService.h"
+#import "DataManager.h"
+#import "SharedUICode.h"
+#import "debugdefines.h"
+#import "NSString+Extensions.h"
+#import "NSDate+Extensions.h"
+
+@interface AddTimeEntryViewController ()
+
+@end
+
+@implementation AddTimeEntryViewController
+@synthesize clockInLabel;
+@synthesize clockOutLabel;
+@synthesize delegate = _delegate;
+@synthesize employeeID;
+
+
+
+- (id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
+{
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    if (self) {
+        // Custom initialization
+    }
+    return self;
+}
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    // Do any additional setup after loading the view from its nib.
+    _reasonTextView.delegate = self;
+    
+    
+    _reasonTextView.text = @"";
+    CALayer *imageLayer = _reasonTextView.layer;
+    [imageLayer setCornerRadius:10];
+    [imageLayer setBorderWidth:2.1];
+    imageLayer.borderColor=[[UIColor lightGrayColor] CGColor];
+
+    UIBarButtonItem *flexSpace = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:self action:nil];
+    
+    UIBarButtonItem *doneDateBarBtn = [[UIBarButtonItem alloc] initWithTitle:@"Done" style:UIBarButtonItemStyleDone target:self action:@selector(dismissKeyboardAction)];
+    
+    NSArray *itemArray = [[NSArray alloc] initWithObjects:flexSpace, doneDateBarBtn, nil];
+    
+    keyboardToolbar = [[UIToolbar alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, 64)];
+    keyboardToolbar.barStyle=UIBarStyleBlackOpaque;
+    
+    [keyboardToolbar sizeToFit];
+    
+    
+    [keyboardToolbar setItems:itemArray animated:YES];
+    
+    [_reasonTextView setInputAccessoryView:keyboardToolbar];
+    [self registerForKeyboardNotifications];
+
+    
+    clockInTime = @"";
+    clockOutTime = @"";
+    TextFieldMode = 1;
+    
+    CGRect screenBound = [[UIScreen mainScreen] bounds];
+    CGSize screenSize = screenBound.size;
+    CGFloat screenHeight = screenSize.height;
+    
+    pickerViewDate = [[UIView alloc] initWithFrame:CGRectMake(0, screenHeight-300, 320, 246)];
+    [pickerViewDate setBackgroundColor:[UIColor colorWithRed:240/255.0 green:240/255.0 blue:240/255.0 alpha:1.0]];
+
+    theDatePicker = [[UIDatePicker alloc] initWithFrame:CGRectMake(0, 44, 0, 0)];
+    theDatePicker.datePickerMode = UIDatePickerModeDateAndTime;
+    theDatePicker.hidden = NO;
+    NSDate *date = [NSDate date];
+    theDatePicker.date = date;
+
+    
+//    theDatePicker = [[UIDatePicker alloc] initWithFrame:CGRectMake(0.0, 44.0, 0.0, 0.0)];
+//    theDatePicker.datePickerMode = UIDatePickerModeDateAndTime;
+//    [UIView appearanceWhenContainedIn:[UITableView class], [UIDatePicker class], nil].backgroundColor = [UIColor colorWithWhite:1 alpha:1];
+
+//    [theDatePicker addTarget:self action:nil forControlEvents:UIControlEventValueChanged];
+    
+//    theDatePicker.backgroundColor = [UIColor whiteColor];
+
+    
+}
+
+- (void)viewDidUnload
+{
+    [self setClockInLabel:nil];
+    [self setClockOutLabel:nil];
+    theDatePicker = nil;
+    pickerToolbar = nil;
+    pickerViewDate = nil;
+
+    [super viewDidUnload];
+    // Release any retained subviews of the main view.
+    // e.g. self.myOutlet = nil;
+}
+
+-(void) viewWillAppear:(BOOL)animated{
+    [_clockInButton setTitle:@"" forState:UIControlStateNormal];
+    [_clockOutButton setTitle:@"" forState:UIControlStateNormal];
+
+    _mainView.backgroundColor = UIColorFromRGB(GRAY_BACKGROUND_COLOR);
+    
+    _scrollView.backgroundColor = UIColorFromRGB(GRAY_BACKGROUND_COLOR);
+    [_scrollView setScrollEnabled:YES];
+    [_scrollView setContentSize:CGSizeMake(320, 650)];
+    _scrollView.delaysContentTouches = NO;
+    
+    NSDictionary *navbarTitleTextAttributes = [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [UIColor whiteColor],
+                                               NSForegroundColorAttributeName,
+                                               nil];
+    [self.navigationController.navigationBar setTitleTextAttributes:navbarTitleTextAttributes];
+
+    [self removeKeyboard];
+
+}
+// Call this method somewhere in your view controller setup code.
+- (void)registerForKeyboardNotifications
+{
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(keyboardWasShown:)
+                                                 name:UIKeyboardDidShowNotification object:nil];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(keyboardWillBeHidden:)
+                                                 name:UIKeyboardWillHideNotification object:nil];
+    
+}
+
+
+// Called when the UIKeyboardDidShowNotification is sent.
+- (void)keyboardWasShown:(NSNotification*)aNotification
+{
+    NSDictionary* info = [aNotification userInfo];
+    CGSize kbSize = [[info objectForKey:UIKeyboardFrameBeginUserInfoKey] CGRectValue].size;
+    UIEdgeInsets contentInsets;
+    contentInsets = UIEdgeInsetsMake(0.0, 0.0, kbSize.height, 0.0);
+    
+    
+    _scrollView.contentInset = contentInsets;
+    _scrollView.scrollIndicatorInsets = contentInsets;
+    
+    // If active text field is hidden by keyboard, scroll it so it's visible
+    // Your app might not need or want this behavior.
+    CGRect aRect = self.view.frame;
+    aRect.size.height -= kbSize.height;
+    if (!CGRectContainsPoint(aRect, _clockOutButton.frame.origin) ) {
+        [self.scrollView scrollRectToVisible:_reasonTextView.frame animated:YES];
+        
+    }
+}
+
+// Called when the UIKeyboardWillHideNotification is sent
+- (void)keyboardWillBeHidden:(NSNotification*)aNotification
+{
+    UIEdgeInsets contentInsets = UIEdgeInsetsZero;
+    _scrollView.contentInset = contentInsets;
+    _scrollView.scrollIndicatorInsets = contentInsets;
+}
+
+
+-(void)removeKeyboard{
+ //   [_clockInTextField resignFirstResponder];
+ //   [_clockOutTextField resignFirstResponder];
+}
+
+-(void)dismissKeyboardAction{
+    [_reasonTextView resignFirstResponder];
+    
+}
+
+
+
+- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
+{
+    return (interfaceOrientation == UIInterfaceOrientationPortrait);
+}
+
+
+
+- (IBAction)doTimeEntryCancel:(id)sender {
+    [self.delegate addTimeEntryViewControllerDidFinish:self];
+}
+
+
+#pragma mark - Create New Time Entry
+
+-(void) callCreateTimeEntryWebService{
+    DataManager* manager = [DataManager sharedManager];
+    if ([manager isBusy]) {
+        [SharedUICode displayServerIsBusy];
+        return;
+    }
+
+    NSDate *clockInDateTime = [_clockInButton.titleLabel.text toLongDateTime];
+    NSDate* clockOutDateTime = [_clockOutButton.titleLabel.text toLongDateTime];
+    if (nil == clockInDateTime) {
+        clockOutDateTime = clockInDateTime;
+    }
+
+    [self startSpinnerWithMessage:@"Connecting to the server..."];
+
+    [manager sendNewTimeEntryToServer:clockInDateTime clockOut:clockOutDateTime notes:_reasonTextView.text withCompletion:^(NSInteger errorCode, NSString * _Nullable resultMessage, NSDictionary * _Nullable results, NSError * _Nullable error) {
+        [self stopSpinner];
+        switch (errorCode) {
+            case DATAMANAGER_BUSY: {
+                [SharedUICode displayServerIsBusy];
+                break;
+            }
+            case SERVICE_UNAVAILABLE_ERROR: {
+                [SharedUICode displayServiceUnavailableErrorWithMsg:@"NOTE: You can continue to delete time entries and we will save to the server later."];
+                break;
+            }
+            case SERVICE_ERRORCODE_UNKNOWN_ERROR: {
+                [SharedUICode checkResultsMessageAndDisplayError:resultMessage error:error];
+                break;
+            }
+            case SERVICE_ERRORCODE_SUCCESSFUL: {
+                if ([CommonLib isProduction])
+                {
+                    Mixpanel *mixpanel = [Mixpanel sharedInstance];
+                    UserClass *user = [UserClass getInstance];
+                    [mixpanel track:@"Add Time Entry" properties:@{ @"email": user.userEmail}];
+                }
+                [self.delegate addTimeEntryViewControllerDidFinish:self];
+            }
+            default: {
+#ifndef RELEASE
+                DEBUG_MSG
+                NSLog(@"Unhandled errorCode: %ld %@", (long)errorCode, msg);
+#endif
+                break;
+            }
+        }
+    }];
+
+}
+
+
+- (IBAction)doTimeEntrySave:(id)sender {
+    BOOL isEmpty = [NSString isNilOrEmpty:_clockInButton.titleLabel.text];
+
+    if (isEmpty) {
+        UIAlertView  *alert = [[UIAlertView alloc] initWithTitle:nil message:@"To use this feature you need to enter a clock in and out value. Please enter a clock In Time" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+        
+    }
+    else{
+        isEmpty = [NSString isNilOrEmpty:_clockOutButton.titleLabel.text];
+        if (isEmpty) {
+            UIAlertView  *alert = [[UIAlertView alloc] initWithTitle:nil message:@"To use this feature you need to enter a clock in and out value. Please enter a clock Out Time" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+            
+        }
+        else if ([_reasonTextView.text length] == 0) {
+            UIAlertView  *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Please enter a reason for the add" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+            
+        }
+
+        else{
+            [self callCreateTimeEntryWebService];
+        }
+    }
+}
+
+
+
+-(void)touchesBegan:(NSSet*)trigger withEvent:(UIEvent*)event{
+    UITouch *touch = [trigger anyObject];
+    
+    if((touch.view.tag == 1) || (touch.view.tag == 2)){
+        CGRect pickerFrame = CGRectMake(0,245,320,216);
+        pickDate = [[UIDatePicker alloc]initWithFrame:pickerFrame];
+        
+        [pickDate addTarget:self action:@selector(dateSelected:)forControlEvents:UIControlEventValueChanged];
+        [self.view addSubview:pickDate];
+        
+        if (touch.view.tag == 1){
+            TextFieldMode = 1;
+            if (![clockInLabel.text isEqualToString:@""])
+                pickDate.date = [clockInLabel.text toLongDateTime];
+        }
+        else {
+            TextFieldMode = 2;
+            if (![clockOutLabel.text isEqualToString:@""])
+                pickDate.date = [clockOutLabel.text toLongDateTime];
+        }
+    }
+}
+-(void)dateSelected:(id)sender{
+    
+    if (TextFieldMode == 1)
+        [_clockInButton setTitle:[[sender date] toLongDateTimeString] forState:UIControlStateNormal];
+
+    else {
+        [_clockOutButton setTitle:[[sender date] toLongDateTimeString] forState:UIControlStateNormal];
+
+    }
+}
+
+
+-(BOOL)closeDatePicker:(id)sender{
+//    [pickerViewDate dismissWithClickedButtonIndex:0 animated:YES];
+     [pickerViewDate removeFromSuperview];
+    return YES;
+}
+
+-(IBAction)DatePickerDoneClick{
+    UIButton *curButton;
+    if (TextFieldMode == 1)
+        curButton = _clockInButton;
+    else
+        curButton= _clockOutButton;
+    [curButton setTitle:[theDatePicker.date toLongDateTimeString] forState:UIControlStateNormal];
+    
+    [self closeDatePicker:self];
+}
+
+-(IBAction)DatePickerCancelClick{
+    [self closeDatePicker:self];
+}
+
+
+-(void) showDatePicker{
+    
+    pickerToolbar = [[UIToolbar alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, 64)];
+    pickerToolbar.barStyle=UIBarStyleBlackOpaque;
+
+    [pickerToolbar sizeToFit];
+    
+    UIBarButtonItem *cancelBtn = [[UIBarButtonItem alloc] initWithTitle:@"Cancel" style:UIBarButtonItemStyleBordered target:self action:@selector(DatePickerCancelClick)];
+    
+    
+    UIBarButtonItem *flexSpace = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:self action:nil];
+    
+    
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0.0 , 11.0f, 80, 20.0f)];
+    [titleLabel setBackgroundColor:[UIColor clearColor]];
+    [titleLabel setTextColor:[UIColor whiteColor]];
+    
+    UIBarButtonItem *titleButton = [[UIBarButtonItem alloc] initWithCustomView:titleLabel];
+    if (TextFieldMode == 1)
+        titleLabel.text = @"Clock In";
+    else
+        titleLabel.text = @"Clock Out";
+    
+    UIBarButtonItem *doneDateBarBtn = [[UIBarButtonItem alloc] initWithTitle:@"Done" style:UIBarButtonItemStyleBordered target:self action:@selector(DatePickerDoneClick)];
+
+    
+    NSArray *itemArray = [[NSArray alloc] initWithObjects:cancelBtn, flexSpace, titleButton, flexSpace, doneDateBarBtn, nil];
+    
+    [pickerToolbar setItems:itemArray animated:YES];
+    
+    UIButton *curButton;
+    if (TextFieldMode == 1)
+        curButton = _clockInButton;
+    else
+        curButton = _clockOutButton;
+    
+    BOOL isEmpty = [NSString isNilOrEmpty:curButton.titleLabel.text];
+    
+    if (! isEmpty)
+        theDatePicker.date = [curButton.titleLabel.text toLongDateTime];
+    else
+        [curButton setTitle:[theDatePicker.date toLongDateTimeString] forState:UIControlStateNormal];
+    
+        [pickerViewDate addSubview:pickerToolbar];
+        [pickerViewDate addSubview:theDatePicker];
+        
+        [self.view addSubview:pickerViewDate];
+    
+}
+
+
+- (IBAction)doClockInBtnClick:(id)sender {
+    TextFieldMode = 1;
+    [self showDatePicker];
+
+}
+- (IBAction)clockOutBtnClick:(id)sender {
+    TextFieldMode = 2;
+    [self showDatePicker];
+
+}
+@end

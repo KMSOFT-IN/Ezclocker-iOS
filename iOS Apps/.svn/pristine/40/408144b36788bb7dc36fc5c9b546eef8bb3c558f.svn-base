@@ -1,0 +1,38 @@
+//
+//  ScheduleViewController.h
+//  ezClocker
+//
+//  Created by Raya Khashab on 9/23/14.
+//  Copyright (c) 2014 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+
+@interface ScheduleViewController : UIViewController<UITableViewDelegate, NSURLConnectionDataDelegate, UIActionSheetDelegate>{
+    NSMutableData *data;
+    UIBarButtonItem *actionButton;
+    UIDatePicker *theDatePicker;
+    UIToolbar* pickerToolbar;
+    UIView* pickerViewDate;
+    NSDate *startingDate;
+    NSDateFormatter *formatterISO8601DateTime;
+
+    NSMutableArray *scheduleList;
+    UIButton *selectDateButton;
+}
+@property (weak, nonatomic) IBOutlet UILabel *totalHoursLabel;
+@property (weak, nonatomic) IBOutlet UILabel *totalHoursValue;
+@property (weak, nonatomic) IBOutlet UITableViewCell *nextShiftCell;
+@property (weak, nonatomic) IBOutlet UIView *selectedDateView;
+@property (weak, nonatomic) IBOutlet UITableViewCell *weekLabelCell;
+@property (weak, nonatomic) IBOutlet UITableViewCell *totalHoursCell;
+- (IBAction)doChangeDate;
+- (IBAction)doChangeDateBtnClick:(id)sender;
+- (IBAction)doPrevDateClick:(id)sender;
+- (IBAction)doNextDateClick:(id)sender;
+@property (weak, nonatomic) IBOutlet UILabel *nextShiftLabel;
+- (IBAction)revealMenu:(id)sender;
+@property (weak, nonatomic) IBOutlet UITableView *scheduleTable;
+@property (weak, nonatomic) IBOutlet UILabel *shiftDate;
+
+@end

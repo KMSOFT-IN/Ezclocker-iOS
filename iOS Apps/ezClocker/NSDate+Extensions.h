@@ -1,0 +1,65 @@
+//
+//  NSDate+Extensions.h
+//  ezClocker
+//
+//  Created by Kenneth Lewis on 12/14/15.
+//  Copyright © 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <Foundation/Foundation.h>
+
+#define kDefaultDateFormat @"MM/dd/yyyy"
+#define kDateTimeUTCFormatZ @"yyyy-MM-dd'T'HH:mm:ssZ"
+
+//#ifndef PERSONAL_VERSION
+// #define kLongDateTimeFormat @"MM/dd/yyyy h:mm:ss a"
+// #define kDefaultTimeFormat @"h:mm:ss a"
+//#else
+ #define kLongDateTimeFormat @"MM/dd/yyyy h:mm a"
+ #define kDefaultTimeFormat @"h:mm a"
+// #define kDateTimeUTCFormatZ @"yyyy-MM-dd'T'HH:mmZ"
+//#endif
+#define kEEMMddFormat @"EEE MMM dd"
+#define kEEEMMddFormat @"EEEE MMM dd"
+#define kUTCTimeZone @"UTC"
+
+@interface NSDate (NSDateExtensions)
+
++ (NSDate*)toDate:(NSString*)str withFormat:(NSString*)dateFormat withTimeZone:(NSTimeZone*)timeZone;
+
+// yyyy-MM-dd'T'HH:mm:ssZ
++ (NSDate*)fromUTCDateTime:(NSString*)utcStr;
++ (NSDate*)fromUTCDateTime:(NSString*)utcStr timeZone:(NSTimeZone*)timeZone;
+
++ (NSString*)toString:(NSDate*)date withFormat:(NSString*)dateFormat withTimeZone:(NSTimeZone*)timeZone;
++ (NSString*)toString:(NSDate*)date withFormat:(NSString*)dateFormat;
+
+// MM/dd/yyyy
++ (NSString*)toDefaultDateString:(NSDate*)date;
+// MM/dd/yyyy
+- (NSString*)toDefaultDateString;
+
+// MM/dd/yyyy h:mm:ss a
++ (NSString*)toLongDateTimeString:(NSDate*)date;
+- (NSString*)toLongDateTimeString;
+
+// h:mm:ss a
++ (NSString*)toDefaultTimeString:(NSDate*)date;
+- (NSString*)toDefaultTimeString;
+
++ (NSString*)toUTCDateTimeString:(NSDate*)date;
+- (NSString*)toUTCDateTimeString;
+
+- (NSString*)toUTCDateTimeStringForURL;
+
+- (NSString*)toEEMMddFormat;
+
+- (NSString*)toEEEMMddFormat;
+
++ (BOOL)isNilOrNull:(NSDate*)date;
+
++ (BOOL)isEquals:(NSDate*)src dest:(NSDate*)aDest;
+
++ (NSDate*)dateWithString:(NSString*)date;
+
+@end

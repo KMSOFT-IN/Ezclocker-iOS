@@ -1,0 +1,367 @@
+//
+//  Employee+Extensions.m
+//  ezClocker
+//
+//  Created by Kenneth Lewis on 12/15/15.
+//  Copyright © 2015 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "Employee+Extensions.h"
+#import "NSString+Extensions.h"
+#import "NSManagedObjectContext+Extensions.h"
+#import "DayHistoryItem.h"
+#import "DayHistoryItem+Extensions.h"
+#import "NSManagedObject+Extensions.h"
+#import "DayHistoryItem.h"
+#import "debugdefines.h"
+#import "NSDate+Extensions.h"
+#import "coredatadefines.h"
+#import "CommonLib.h"
+#import "TimeEntry+Extensions.h"
+#import "ClockInfo+Extensions.h"
+#import "NSNumber+Extensions.h"
+
+@implementation Employee (EmployeeExtensions)
+
+- (DayHistoryItem*)insertNewDayHistoryItem {
+    DayHistoryItem* result = [self.managedObjectContext insertNewEntityForClass:[DayHistoryItem class]];
+    return result;
+}
+
+#pragma mark - DeleteTimeEntry methods
+
+- (DeletedTimeEntry*)insertNewDeleteTimeEntry {
+    DeletedTimeEntry* result = [self.managedObjectContext insertNewEntityForClass:[DeletedTimeEntry class]];
+    return result;
+}
+
+- (NSMutableArray*)fetchDeletedTimeEntries:(NSError *__autoreleasing *)error {
+    DEBUG_MSG
+    NSAssert(nil != error, @"error cannot be nil %@", msg);
+
+    NSFetchRequest* fetchRequest = [NSFetchRequest new];
+    NSEntityDescription* entity = [self entityForClass:[DeletedTimeEntry class]];
+    fetchRequest.predicate = [NSPredicate predicateWithFormat:@"employee == %@", self];
+    [fetchRequest setEntity:entity];
+    NSArray* array = [self.managedObjectContext executeFetchRequest:fetchRequest error:error];
+    if (nil != *error) {
+        return nil;
+    }
+    if (nil != array && array.count > 0) {
+        NSMutableArray* results = [[NSMutableArray alloc] initWithArray:array];
+        return results;
+    } else {
+        return [NSMutableArray new];
+    }
+}
+
+- (DeletedTimeEntry*)fetchDeletedTimeEntry:(NSNumber*)timeEntryID error:(NSError*__autoreleasing*)error {
+    DEBUG_MSG
+    NSAssert(nil != error, @"error cannot be nil %@", msg);
+
+    BOOL bIsTimeEntryIDValid = ![NSNumber isNilOrNull:timeEntryID] && ([timeEntryID integerValue] > 0);
+    NSAssert(TRUE == bIsTimeEntryIDValid, @"timeEntryID must be valid %@", msg);
+    assert(TRUE == bIsTimeEntryIDValid); // sanity!
+
+    NSArray* deletedTimeEntries = [self fetchDeletedTimeEntries:error];
+    if (nil == deletedTimeEntries) {
+        return nil;
+    }
+    if (nil != *error) {
+        return nil;
+    }
+    for (DeletedTimeEntry* deletedTimeEntry in deletedTimeEntries) {
+        if ([deletedTimeEntry.timeEntryID integerValue] == [timeEntryID integerValue]) {
+            return deletedTimeEntry;
+        }
+    }
+    return nil;
+
+}
+
+- (BOOL)deleteTimeEntryFromDeletedTimeEntries:(NSNumber*)timeEntryID error:(NSError*__autoreleasing*)error {
+    DEBUG_MSG
+    NSAssert(nil != error, @"error cannot be nil %@", msg);
+
+    BOOL bIsTimeEntryIDValid = ![NSNumber isNilOrNull:timeEntryID] && ([timeEntryID integerValue] > 0);
+    NSAssert(TRUE == bIsTimeEntryIDValid, @"timeEntryID must be valid %@", msg);
+    assert(TRUE == bIsTimeEntryIDValid); // sanity!
+
+    DeletedTimeEntry* deletedTimeEntry = [self fetchDeletedTimeEntry:timeEntryID error:error];
+    if (nil != *error) {
+        return FALSE;
+    }
+    if (nil == deletedTimeEntry) {
+        return FALSE;
+    }
+    REMOVE_ENTITY_FROM_LIST(deletedEntries, deletedTimeEntry)
+}
+
+- (void)setValuesForKeysWithDictionary:(NSDictionary<NSString *,id> *)keyedValues
+{
+    DEBUG_MSG
+
+    NSAssert(nil != keyedValues, @"Error initializing Managed Object DayHistoryItem %@", msg);
+
+    NSNumber* __employeeID = keyedValues[kEmployeeIDKey];
+    NSAssert(nil != __employeeID, @"employeeID cannot be nil %@", msg);
+
+    self.employeeID = __employeeID;
+
+    NSString* value = [NSString trim:keyedValues[kEmployeeNameKey]];
+    self.name = value;
+
+    value = [NSString trim:keyedValues[kEmployeeEmailKey]];
+    self.email = value;
+
+}
+
+- (void)addDayHistoryItemForDictionary:(NSDictionary*)dict {
+    DEBUG_MSG
+
+    NSAssert(nil != dict, @"dict cannot be nil %@", msg);
+
+    DayHistoryItem* item = [self insertNewDayHistoryItem];
+    NSAssert(nil != item, @"Error insertint new DayHistoryItem into Employee context");
+
+    [item setValuesForKeysWithDictionary:dict];
+    [self addDayHistoryObject:item];
+}
+
+- (NSArray*)fetchHistoryItems:(NSError**)error; {
+    DEBUG_MSG
+    NSAssert(nil != error, @"error cannot be nil %@", msg);
+
+    NSFetchRequest* fetchRequest = [NSFetchRequest new];
+    NSEntityDescription* entity = [self entityForClass:[DayHistoryItem class]];
+    fetchRequest.predicate = [NSPredicate predicateWithFormat:@"employee == %@", self];
+    fetchRequest.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"date" ascending:NO]];
+    [fetchRequest setEntity:entity];
+    NSArray* results = [self.managedObjectContext executeFetchRequest:fetchRequest error:error];
+    return results;
+}
+
+- (DayHistoryItem*)fetchHistoryItemByDate:(NSDate *)date error:(NSError *__autoreleasing *)error {
+    NSAssert(nil != date, @"date cannot be nil");
+    NSAssert(nil != error, @"error cannot be nil");
+
+    NSArray* historyItems = [self fetchHistoryItems:error];
+    if (nil == historyItems) {
+        return nil;
+    }
+    NSString* srcDate;
+    NSString* destDate = [date toDefaultDateString];
+    DayHistoryItem* result = nil;
+    for (DayHistoryItem* item in historyItems) {
+        srcDate = [item.date toDefaultDateString];
+        if ([srcDate isEqualToString:destDate]) {
+            result = item;
+            return result;
+        }
+    }
+    return nil;
+}
+
+- (DayHistoryItem*)fetchTodaysDayHistoryItem:(NSError* __autoreleasing*)error {
+    DayHistoryItem* dayHistoryItem = [self fetchHistoryItemByDate:[NSDate date] error:error];
+    return dayHistoryItem;
+}
+
+- (TimeEntry*)fetchLastTimeEntryForToday:(NSError *__autoreleasing *)error {
+    DayHistoryItem* dayHistoryItem = [self fetchTodaysDayHistoryItem:error];
+    if (!dayHistoryItem) {
+        return nil;
+    }
+    NSArray* timeEntries = [dayHistoryItem fetchTimeEntries:error];
+    if (nil == timeEntries || nil != *error) {
+        return nil;
+    }
+    NSInteger count = timeEntries.count;
+    if (count > 0) {
+        TimeEntry* result = [timeEntries lastObject];
+        return result;
+    }
+    return nil;
+}
+
+- (TimeEntry*)fetchTimeEntryByObjectID:(NSManagedObjectID*)timeEntryObjectID error:(NSError *__autoreleasing *)error {
+    DEBUG_MSG
+
+    NSAssert(nil != timeEntryObjectID, @"Invalid timeEntryObjectID %@", msg);
+    NSAssert(nil != error, @"error cannot be nil %@", msg);
+    NSArray* historyItems = [self fetchHistoryItems:error];
+    if (nil == historyItems) {
+        return nil;
+    }
+    if (nil != *error) {
+        return nil;
+    }
+    TimeEntry* timeEntry;
+    for (DayHistoryItem* item in historyItems) {
+        timeEntry = [item fetchTimeEntryByObjectID:timeEntryObjectID error:error];
+        if (nil != *error) {
+            return nil;
+        }
+        if (timeEntry) {
+            return timeEntry;
+        }
+    }
+    return nil;
+}
+
+- (TimeEntry*)fetchTimeEntryByID:(NSInteger)timeEntryID error:(NSError *__autoreleasing *)error {
+    DEBUG_MSG
+
+    NSAssert(timeEntryID > 0, @"Invalid timeEntryID %@", msg);
+    NSAssert(nil != error, @"error cannot be nil %@", msg);
+    NSArray* historyItems = [self fetchHistoryItems:error];
+    if (nil == historyItems) {
+        return nil;
+    }
+    if (nil != *error) {
+        return nil;
+    }
+    TimeEntry* timeEntry;
+    for (DayHistoryItem* item in historyItems) {
+        timeEntry = [item fetchTimeEntryByID:timeEntryID error:error];
+        if (nil != *error) {
+            return nil;
+        }
+        if (timeEntry) {
+            return timeEntry;
+        }
+    }
+    return nil;
+}
+
+- (NSMutableArray*)fetchTimeEntriesNeedingSubmission:(NSError*__autoreleasing*)error {
+    DEBUG_MSG
+    NSAssert(nil != error, @"error cannot be nil @", msg);
+    NSArray* dayHistoryItems = [self fetchHistoryItems:error];
+    if ((nil != *error) || (nil == dayHistoryItems) || (0 == dayHistoryItems.count)) {
+        return nil;
+    }
+    NSArray* timeEntries;
+    NSMutableArray* timeEntriesForSubmission = [NSMutableArray new];
+    for (DayHistoryItem* item in dayHistoryItems) {
+        timeEntries = [item fetchTimeEntries:error];
+        if (nil != *error) {
+            return nil;
+        }
+        if (nil == timeEntries || (0 == timeEntries.count)) {
+            continue;
+        }
+        for (TimeEntry* timeEntry in timeEntries) {
+            if ([timeEntry isNeedingSubmission]) {
+                [timeEntriesForSubmission addObject:timeEntry];
+            }
+        }
+    }
+    return timeEntriesForSubmission;
+}
+
+- (TimeEntry*)saveNewClockInfo:(NSDictionary*)dict currentTimeEntry:(TimeEntry*)currentTimeEntry error:(NSError* __autoreleasing*)error {
+    DEBUG_MSG
+    NSAssert(nil != dict, @"dict cannot be nil %@", msg);
+    NSAssert(nil != error, @"error cannot be nil %@", msg);
+
+    NSNumber* num = [dict valueForKey:kclockModeKey];
+    ClockMode clockMode = (ClockMode)[num intValue];
+    TimeEntry* timeEntry = nil;
+    DayHistoryItem* dayHistoryItem;
+    if (clockMode == ClockModeOut) {
+        if (nil != currentTimeEntry) {
+            timeEntry = currentTimeEntry;
+            dayHistoryItem = [self fetchHistoryItemByDate:timeEntry.clockIn.dateTimeEntry error:error];
+            if (nil != *error) {
+                return FALSE;
+            }
+        } else {
+            timeEntry = [self fetchLastTimeEntryForToday:error];
+            NSAssert(nil != timeEntry, @"timeEntry cannot be nil if your clocking out %@", msg);
+            dayHistoryItem = timeEntry.dayHistoryItem;
+            assert(nil != dayHistoryItem);
+        }
+    } else {
+        dayHistoryItem = [self fetchTodaysDayHistoryItem:error];
+    }
+    if (nil != *error) {
+        return FALSE;
+    }
+    NSDate* date = [dict valueForKey:kcurrentDateTimeKey];
+    if (nil == dayHistoryItem) {
+        dayHistoryItem = [self insertNewDayHistoryItem];
+        dayHistoryItem.date = date;
+        dayHistoryItem.employee = self;
+    }
+    if (clockMode == ClockModeIn) {
+        timeEntry = [dayHistoryItem insertNewTimeEntry];
+        timeEntry.dayHistoryItem = dayHistoryItem;
+    }
+    [timeEntry setDBStatus:dsPendingInsert];
+    [timeEntry updateTimeEntryFromDict:dict clockMode:clockMode];
+    [timeEntry updateDBStatusAndDBStatusForClockMode:[timeEntry getDBStatus] clockMode:clockMode];
+    [timeEntry.managedObjectContext save:error];
+    if (nil != *error) {
+        return nil;
+    }
+    [dayHistoryItem.managedObjectContext save:error];
+    if (nil != *error) {
+        return nil;
+    }
+    [self.managedObjectContext save:error];
+    if (nil != *error) {
+        return nil;
+    }
+    return timeEntry;
+}
+
+- (TimeEntry*)createNewTimeEntry:(NSDictionary*)dict error:(NSError* __autoreleasing*)error {
+    DEBUG_MSG
+    NSAssert(nil != dict, @"dict cannot be nil %@", msg);
+    NSAssert(nil != error, @"error cannot be nil %@", msg);
+    NSDate* clockInDate = [dict valueForKey:kClockInDateKey];
+    NSAssert(TRUE != [NSDate isNilOrNull:clockInDate], @"clockInDate cannot be nil %@", msg);
+
+    NSDate* clockOutDate = [dict valueForKey:kClockOutDateKey];
+
+    TimeEntry* timeEntry = nil;
+    DayHistoryItem* dayHistoryItem = [self fetchHistoryItemByDate:clockInDate error:error];
+    if (nil != *error) {
+        return FALSE;
+    }
+    if (nil == dayHistoryItem) {
+        dayHistoryItem = [self insertNewDayHistoryItem];
+        dayHistoryItem.date = clockInDate;
+        dayHistoryItem.employee = self;
+    }
+    timeEntry = [dayHistoryItem insertNewTimeEntry];
+    timeEntry.dayHistoryItem = dayHistoryItem;
+
+    [timeEntry updateClockInClockOut:clockInDate clockOut:clockOutDate];
+
+    [timeEntry updateDBStatus:dsPendingCreate];
+
+    [timeEntry.managedObjectContext save:error];
+    if (nil != *error) {
+        return nil;
+    }
+    [dayHistoryItem.managedObjectContext save:error];
+    if (nil != *error) {
+        return nil;
+    }
+    [self.managedObjectContext save:error];
+    if (nil != *error) {
+        return nil;
+    }
+    return timeEntry;
+}
+
+- (BOOL)removeDayHistoryItem:(DayHistoryItem*)dayHistoryItem error:(NSError*__autoreleasing*)error {
+    DEBUG_MSG
+    NSAssert(nil != dayHistoryItem, @"dayHistoryItem cannot be nil %@", msg);
+    NSAssert(nil != error, @"error cannot be nil %@", msg);
+    REMOVE_ENTITY_FROM_LIST(dayHistory, dayHistoryItem)
+}
+
+@end

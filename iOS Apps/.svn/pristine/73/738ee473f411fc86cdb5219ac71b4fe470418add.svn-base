@@ -1,0 +1,48 @@
+//
+//  EmployeeTimeSheetViewController.h
+//  Created by Raya Khashab on 1/27/13.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import <AddressBook/AddressBook.h>
+#import "MBProgressHUD.h"
+#import "user.h"
+#import "ClockWebServices.h"
+#import "CheckClockStatusWebService.h"
+
+
+@interface EmployeeProfileViewController : UIViewController<NSURLConnectionDataDelegate, UISplitViewControllerDelegate, clockWebServicesDelegate, checkClockStatusWebServicesDelegate>
+{
+    NSNumber *employeeID;
+    NSString *employeeName;    
+    NSString *employeeEmail;    
+    UserClass *user;
+    NSMutableData *data;
+    bool inviteCalledFlag;
+
+
+}
+@property (weak, nonatomic) IBOutlet UILabel *emailLabel;
+@property (weak, nonatomic) IBOutlet UILabel *clockInLabel;
+@property (weak, nonatomic) IBOutlet UILabel *clockOutLabel;
+@property (weak, nonatomic) IBOutlet UIButton *clockInBtn;
+@property (weak, nonatomic) IBOutlet UIButton *clockOutBtn;
+- (IBAction)doClockIn:(id)sender;
+- (IBAction)doClockOut:(id)sender;
+
+- (IBAction)doInvite:(id)sender;
+@property (weak, nonatomic) IBOutlet UIImageView *employeeImage;
+@property (weak, nonatomic) IBOutlet UIButton *inviteButton;
+@property (weak, nonatomic) IBOutlet UILabel *employeeNameLabel;
+@property (weak, nonatomic) IBOutlet UILabel *inviteInfoLabel;
+
+
+@property (nonatomic, retain) NSNumber *employeeID;
+@property (nonatomic, retain) NSString *employeeName;
+@property (nonatomic, retain) NSString *employeeEmail;
+@property (nonatomic, retain) NSString *acceptedInvite;
+@property (strong, nonatomic) MBProgressHUD *spinner;
+-(void) LoadData;
+
+@end

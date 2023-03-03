@@ -1,0 +1,21 @@
+//
+//  threaddefines.h
+//  ezClocker
+//
+//  Created by Kenneth Lewis on 1/8/16.
+//  Copyright © 2016 ezNova Technologies LLC. All rights reserved.
+//
+
+#ifndef threaddefines_h
+#define threaddefines_h
+
+#define THREAD_BLOCK_START() \
+dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+
+#define MAINTHREAD_BLOCK_START() \
+dispatch_async(dispatch_get_main_queue(), ^{
+
+#define THREAD_BLOCK_END() \
+});
+
+#endif /* threaddefines_h */

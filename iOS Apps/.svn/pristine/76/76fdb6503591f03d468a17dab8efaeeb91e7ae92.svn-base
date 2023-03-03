@@ -1,0 +1,57 @@
+//
+//  TimeSheetMasterViewController.h
+//  ezClocker
+//
+//  Created by Raya Khashab on 10/22/13.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import "user.h"
+#import "TimeSheetDetailViewController.h"
+#import "UIViewControllerEx.h"
+
+typedef enum {
+    Feedback_None = -1,
+    EnjoyingEzClokcer_dlg = 0,
+    CanYouRateUs_dlg = 1,
+    GiveUsFeedback_dlg = 2,
+} RatingDialogType;
+
+@interface TimeSheetMasterViewController : UIViewControllerEx <NSURLConnectionDataDelegate, UITableViewDelegate, UIActionSheetDelegate>{
+    UserClass *user;
+    NSNumber *employeeID;
+    NSMutableData *data;
+    NSString *currentDay;
+    NSTimeInterval lastTimeUpdated;
+//    BOOL editFlag;
+    NSDateFormatter *formatterDateTime12, *formatterISO8601DateTime, *dateFormatterEEEMMMdd;
+    UIBarButtonItem *actionButton, *addButton;
+    UINavigationController *timeSheetNavigationController;
+    RatingDialogType ratingDialogType;
+    UIButton *selectDateButton;
+}
+
+typedef enum {
+	FromDateActive = 0,
+	ToDateActive = 1,
+} DateRangeMode;
+
+
+
+extern NSString *const ADD_TIME_ENTRY;
+extern NSString *const EMAIL_TIME_SHEET;
+
+- (IBAction)revealMenu:(id)sender;
+- (IBAction)doSetDateRange:(id)sender;
+@property (weak, nonatomic) IBOutlet UITableView *TimeEntryTableView;
+@property (weak, nonatomic) IBOutlet UIButton *changeDateBtn;
+@property (nonatomic, retain) NSMutableDictionary *timeEntryItems;
+@property (weak, nonatomic) IBOutlet UILabel *TotalHoursLabel;
+@property (weak, nonatomic) IBOutlet UIView *selectedDateView;
+@property (nonatomic, retain) NSNumber *employeeID;
+@property (strong, nonatomic) TimeSheetDetailViewController *timeSheetDetailViewController;
+@property (nonatomic, retain) NSString *employeeName;
+@property (nonatomic, retain) NSString *employeeEmail;
+
+@end

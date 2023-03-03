@@ -1,0 +1,183 @@
+//
+//  AppDelegate.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 10/22/13.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "AppDelegate.h"
+#import "user.h"
+#import "SubscriptionWebService.h"
+#import "CommonLib.h"
+#import "Mixpanel.h"
+#import "LocationManager.h"
+
+#ifndef PERSONAL_VERSION
+#import "EZPurchaseManager.h"
+#endif
+
+
+
+@implementation AppDelegate
+
+@synthesize subscriptionWebService;
+
+- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
+{
+    // Override point for customization after application launch.
+    //make all the navigation bars light blue from the header_background image
+    UIImage *image = [UIImage imageNamed:@"header_background.jpg"];
+    [[UINavigationBar appearance] setBackgroundImage:image forBarMetrics:UIBarMetricsDefault];
+    //make all bar buttons clear with no borders
+    [[UIBarButtonItem appearance] setBackgroundImage:[[UIImage alloc] init] forState:UIControlStateNormal barMetrics:UIBarMetricsDefault];
+ //   self.window.tintColor = [UIColor whiteColor];
+
+    
+    NSShadow *shadow = [[NSShadow alloc] init];
+    shadow.shadowColor = [UIColor colorWithRed:0.0 green:0.0 blue:0.0 alpha:0.8];
+    shadow.shadowOffset = CGSizeMake(0.0, -1.0);
+    //this is the one that sets the back button's to white
+    [[UINavigationBar appearance] setTintColor:[UIColor whiteColor]];
+    [[UINavigationBar appearance] setBarTintColor:[UIColor whiteColor]];
+    
+    // Navigation bar buttons appearance
+    
+    
+    [[UINavigationBar appearance]setShadowImage:[[UIImage alloc] init]];
+    
+    //Mixpanel setup
+    
+    [Mixpanel sharedInstanceWithToken:MIXPANEL_TOKEN];
+
+    
+    [[LocationManager defaultLocationManager] setDelegate:self];
+    [[LocationManager defaultLocationManager] startTracking];
+    
+    UIPageControl *pageControl = [UIPageControl appearance];
+    
+    pageControl.pageIndicatorTintColor = [UIColor lightGrayColor];
+    pageControl.currentPageIndicatorTintColor = [UIColor orangeColor];
+    pageControl.backgroundColor = [UIColor whiteColor];
+
+#ifdef DEBUG
+//    [[UIApplication sharedApplication] performSelector:@selector(setApplicationBadgeString:) withObject:@"d"];
+#endif
+    
+#ifndef PERSONAL_VERSION
+    [EZPurchaseManager sharedInstance];
+#endif
+    
+    return YES;
+}
+
+- (NSUInteger)application:(UIApplication *)application supportedInterfaceOrientationsForWindow:(UIWindow *)window{
+    return UIInterfaceOrientationMaskPortrait | UIInterfaceOrientationMaskPortraitUpsideDown;
+}
+
+- (BOOL)application:(UIApplication *)application handleOpenURL:(NSURL *)url
+{
+//    if (!url) {  return NO; }
+    
+//    NSString *URLString = [url absoluteString];
+//    [[NSUserDefaults standardUserDefaults] setObject:URLString forKey:@"url"];
+//    [[NSUserDefaults standardUserDefaults] synchronize];
+    return YES;
+}
+							
+- (void)applicationWillResignActive:(UIApplication *)application
+{
+    // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
+    // Use this method to pause ongoing tasks, disable timers, and throttle down OpenGL ES frame rates. Games should use this method to pause the game.
+}
+
+- (void)applicationDidEnterBackground:(UIApplication *)application
+{
+    // Use this method to release shared resources, save user data, invalidate timers, and store enough application state information to restore your application to its current state in case it is terminated later. 
+    // If your application supports background execution, this method is called instead of applicationWillTerminate: when the user quits.
+    [[LocationManager defaultLocationManager] stopTracking];
+}
+
+- (void)applicationWillEnterForeground:(UIApplication *)application
+{
+    // Called as part of the transition from the background to the inactive state; here you can undo many of the changes made on entering the background.
+    //Raya turned this off because the apple validate call in the ezPurchaseManager should do this for me
+ //   if (subscriptionWebService == nil)
+ //       subscriptionWebService = [[SubscriptionWebService alloc] init];
+
+    [[LocationManager defaultLocationManager] startTracking];
+}
+
+- (void)applicationDidBecomeActive:(UIApplication *)application
+{
+    // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
+    //Raya turned this off because the apple validate call in the ezPurchaseManager should do this for me
+
+  //  UserClass *user = [UserClass getInstance];
+  //  if ([user.userType isEqualToString:@"employer"]) {
+  //     //check for subscription
+  //      [subscriptionWebService callHasValidLicenseWebService];
+  //  }
+    
+    UserClass *user = [UserClass getInstance];
+    
+    //rating dialog settings
+    int didUserGiveFeedback = [[NSUserDefaults standardUserDefaults] integerForKey:@"userGaveUsRatingFeedback"];
+    
+    user.userGaveUsRatingFeedback = [NSNumber numberWithInt:didUserGiveFeedback];
+    
+    int tmpValue = [[NSUserDefaults standardUserDefaults] integerForKey:@"appLaunchCounter"];
+    if (didUserGiveFeedback == 0)
+    {
+    
+        tmpValue++;
+        //go a head and save it back in after inc
+        [[NSUserDefaults standardUserDefaults] setInteger:tmpValue forKey:@"appLaunchCounter"];
+    }
+    //this counter will tell us how many times we've launched the app and after a certain amount of times we'll prompt them
+    user.appLaunchCounter = [NSNumber numberWithInt:tmpValue];
+
+}
+
+- (void)applicationWillTerminate:(UIApplication *)application
+{
+    // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
+}
+
+#ifndef PERSONAL_VERSION
+
+#pragma mark Location Services Lifecycle
+-(void) locationError:(NSError *) error;
+{
+    bool bDisableDialog = [[NSUserDefaults standardUserDefaults] boolForKey:DISABLE_LOCATION_REMINDER_DIALOG_KEY];
+    
+    if ((error) && (error.code == kCLErrorDenied) && (!bDisableDialog)){
+        //prompt user to renable location services
+        UIAlertView* alert = [[UIAlertView alloc] initWithTitle:@"Location Services" message:@"This app requires location services to be enabled. Pleases go to Settings App> Privacy > Location and switch ON location services for ezClocker." delegate:nil cancelButtonTitle:@"Do NOT Show Again" otherButtonTitles:@"OK", nil];
+        alert.delegate = self;
+        [alert show];
+    }
+}
+#endif
+
+#pragma mark Alert View Actions
+- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex{
+    bool bDisableDialog = (buttonIndex == 0); //set disable value
+    //persist selection
+    [[NSUserDefaults standardUserDefaults] setBool:bDisableDialog forKey:DISABLE_LOCATION_REMINDER_DIALOG_KEY];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+-(void)application:(UIApplication *)application didReceiveLocalNotification:(UILocalNotification *)notification {
+    UIApplicationState state = [application applicationState];
+    if (state == UIApplicationStateActive) {
+        UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Reminder"
+                                                        message:notification.alertBody
+                                                       delegate:self cancelButtonTitle:@"OK"
+                                              otherButtonTitles:nil];
+        [alert show];
+    }
+
+}
+
+@end

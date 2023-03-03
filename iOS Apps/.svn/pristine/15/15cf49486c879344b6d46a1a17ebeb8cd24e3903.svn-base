@@ -1,0 +1,89 @@
+//
+//  user.h
+//  TCS Mobile
+//
+//  Created by Raya Khashab on 9/2/12.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import <Foundation/Foundation.h>
+#import "EmployerLocation.h"
+
+#ifdef PERSONAL_VERSION
+#import "Reminder.h"
+#endif
+
+@protocol StartEndDateInterface <NSObject>
+
+- (void)setStartdate:(NSString*)value;
+- (void)setEnddate:(NSString*)value;
+
+@end
+
+@interface UserClass : NSObject
+
+@property (nonatomic, retain) NSNumber *employerID;
+@property (nonatomic, retain) NSNumber *userID;
+@property (nonatomic, retain) NSNumber *availableEmployeeSlots;
+@property (nonatomic, retain) NSString *employerName;
+@property (nonatomic, retain) NSString *userType;
+@property (nonatomic, retain) NSString *userEmail;
+@property (nonatomic, retain) NSString *lastEmailToSent;
+@property (nonatomic, retain) NSString *payrollStartDate;
+@property (nonatomic, retain) NSString *payrollEndDate;
+@property int currentClockMode;
+@property (nonatomic, retain) NSString *lastClockIn;
+@property (nonatomic, retain) NSString *lastClockOut;
+@property (nonatomic, retain) NSNumber *activeTimeEntryId;
+@property (nonatomic, retain) NSString *authToken;
+@property (nonatomic, retain) NSString *userPin;
+//@property (nonatomic, retain) NSMutableArray *timeHistory;
+@property (nonatomic, retain) EmployerLocation *employerLocation;
+@property (nonatomic, retain) NSString *subscription_PlanPrice;
+@property (nonatomic, retain) NSString *subscription_PlanExpireDate;
+@property (nonatomic, retain) NSString *subscription_planStartDate;
+@property BOOL subscription_freePlanActive;
+@property BOOL subscription_HasActivePaidPlan;
+@property (nonatomic, retain) NSDate *appInstallDate;
+@property (nonatomic, retain) NSNumber *employeeCount;
+
+@property (nonatomic, retain) NSMutableArray *clockInReminders;
+@property (nonatomic, retain) NSMutableArray *clockOutReminders;
+
+@property (nonatomic, retain) NSMutableDictionary *employeeNameIDList;
+
+//this is service of the rating dialog
+//only show the please rate us dialog after a certain amount of times they have launched the app
+//and after they chose to rate us or not save that so we don't bug them again
+@property (nonatomic, retain) NSNumber *userGaveUsRatingFeedback;
+@property (nonatomic, retain) NSNumber *appLaunchCounter;
+
+@property (nonatomic, assign) int disableTimeEntryEditing;
+
+@property (nonatomic, assign) double totalDuration;
+
+#ifdef PERSONAL_VERSION
+@property (nonatomic, retain) NSString *hasAccount;
+@property (nonatomic, retain) NSString *indivdualName;
+@property (nonatomic, retain) NSString *individualGeneratedPassword;
+
+#endif
+
+@property BOOL remindersSet;
+//@property BOOL passCodeSet;
+
++(UserClass*)getInstance;
++(void)releaseInstance;
+
+- (void) scheduleNotificationOn:(NSDate*) fireDate
+                           text:(NSString*) alertText
+                         action:(NSString*) alertAction
+                          sound:(NSString*) soundfileName
+                    launchImage:(NSString*) launchImage
+                        andInfo:(NSDictionary*) userInfo;
+
+- (NSString*)getModifiedBy;
+- (void)checkPayrollStartDate:(id<StartEndDateInterface>)datesInterface;
+
+
+@end

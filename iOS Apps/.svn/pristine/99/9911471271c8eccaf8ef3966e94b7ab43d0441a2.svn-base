@@ -1,0 +1,359 @@
+//
+//  SubscriptionPlansViewController.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 2/22/14.
+//  Copyright (c) 2014 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "SubscriptionPlansViewController.h"
+#import "EZPurchaseManager.h"
+#import "SKProduct+LocalizedPrice.h"
+#import "ECSlidingViewController.h"
+#import "CommonLib.h"
+#import "user.h"
+#import "MetricsLogWebService.h"
+#import "SubscriptionWebService.h"
+
+@interface SubscriptionPlansViewController ()
+
+@end
+
+
+@implementation SubscriptionPlansViewController
+
+- (id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
+{
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    if (self) {
+        // Custom initialization
+    }
+    return self;
+}
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+	// Do any additional setup after loading the view.
+    
+    [[EZPurchaseManager sharedInstance] addObserver:self forKeyPath:@"receiptDetails" options:NSKeyValueObservingOptionNew context:nil];
+    
+    //call the subscription webservice to check if their subsription has expired
+    [self startSpinner];
+    SubscriptionWebService *subscriptionWebService = [[SubscriptionWebService alloc] init];
+    subscriptionWebService.delegate = (id) self;
+    [subscriptionWebService callHasValidLicenseWebService];
+
+    
+
+
+}
+- (void)viewWillAppear:(BOOL)animated
+{
+	[super viewWillAppear: animated];
+    _mainView.backgroundColor = UIColorFromRGB(GRAY_BACKGROUND_COLOR);
+   
+    NSDictionary *navbarTitleTextAttributes = [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [UIColor whiteColor],
+                                               NSForegroundColorAttributeName,
+                                               nil];
+    [self.navigationController.navigationBar setTitleTextAttributes:navbarTitleTextAttributes];
+
+    
+    
+}
+
+- (void)dealloc
+{
+    //Unwire KVO
+    [[EZPurchaseManager sharedInstance] removeObserver:self forKeyPath:@"receiptDetails"];
+}
+
+
+- (void)didReceiveMemoryWarning
+{
+    [super didReceiveMemoryWarning];
+    // Dispose of any resources that can be recreated.
+}
+
+- (IBAction)revealMenu:(id)sender {
+    [self.slidingViewController anchorTopViewTo:ECRight];
+
+}
+
+-(void) doPurchase: (SKProduct*) product{
+    [self startSpinner];
+#ifndef DEBUG
+    UserClass *user = [UserClass getInstance];
+    //send the info the metric service to record this event if we are in production
+    [MetricsLogWebService LogException: [NSString stringWithFormat:@"Somebody tried to purchase a subscription Yay!!!! userEmail: %@ employerID= %@", user.userEmail, user.employerID]];
+#endif
+
+    [[EZPurchaseManager sharedInstance] setDelegate: self];
+    [[EZPurchaseManager sharedInstance] purchaseProduct:product];
+
+    
+}
+
+#pragma mark - Table view data source
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+{
+    return 1;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{
+    if (tableView == _currentSubscriptionTable)
+        return 3;
+    else
+        return [[[EZPurchaseManager sharedInstance] availableProducts] count];
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    static NSString *CellIdentifier = @"Cell";
+    
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:CellIdentifier];
+    if (cell == nil) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:CellIdentifier];
+        cell.textLabel.font = [UIFont boldSystemFontOfSize:14.0 ];
+
+    }
+    
+    if (tableView == _currentSubscriptionTable)
+    {
+        UserClass *user = [UserClass getInstance];
+        UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(5, 0, 120, 30)];
+        label.font = [UIFont boldSystemFontOfSize:14.0 ];
+        label.textAlignment= NSTextAlignmentCenter;
+        
+        if (indexPath.row == 0){
+            cell.textLabel.text = @"Subscription";
+            if (user.subscription_freePlanActive)
+            {
+                label.text = @"Free";
+                cell.detailTextLabel.text = @"Up to 2 employees";
+            }
+            else{
+                 label.text = user.subscription_PlanPrice;
+            }
+        }
+        
+        else if (indexPath.row == 1){
+            cell.textLabel.text = @"Purchased";
+            if ((user.subscription_freePlanActive) || ([user.subscription_planStartDate isEqual:[NSNull null]]))
+            {
+ 
+                label.text = @"n/a";
+            }
+            else{
+                label.text = user.subscription_planStartDate;
+
+            }
+
+        }
+        else
+        {
+            cell.textLabel.text =@"Expire";
+            if ((user.subscription_freePlanActive) || ([user.subscription_PlanExpireDate isEqual:[NSNull null]]))
+            {
+                
+                label.text = @"n/a";
+            }
+            else{
+                label.text = user.subscription_PlanExpireDate;
+                
+            }
+
+        }
+        cell.accessoryView = label;
+       // [cell.contentView addSubview:label];
+    
+    }
+    else
+    {
+        SKProduct* product = [[[EZPurchaseManager sharedInstance] availableProducts] objectAtIndex:indexPath.row];
+    
+    //Set the name and price
+//    cell.textLabel.text = [NSString stringWithFormat:@"%@ (%@) - %@", product.localizedTitle, [[EZPurchaseManager sharedInstance] durationForProductIdentifier:product.productIdentifier], product.localizedPrice];
+    
+        cell.textLabel.text = product.localizedTitle;
+        cell.detailTextLabel.text = [NSString stringWithFormat:@"%@", product.localizedDescription];
+        
+         UIButton *purchaseButton = [UIButton buttonWithType:UIButtonTypeRoundedRect];
+        [purchaseButton addTarget:self action:@selector(purchaseBtnClick:) forControlEvents:
+        UIControlEventTouchUpInside];
+        //tag it so we know which row it comes from
+        purchaseButton.tag = indexPath.row;
+        [purchaseButton setTitle:[NSString stringWithFormat:@"%@ /month", product.localizedPrice] forState:UIControlStateNormal];
+  //      downloadButton.backgroundColor = [UIColor greenColor];
+        [purchaseButton setFrame:CGRectMake(0, 0, 120, 35)];
+        cell.accessoryView = purchaseButton;
+  //  }
+    }
+    return cell;
+}
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    if (tableView != _currentSubscriptionTable)
+    {
+        UserClass *user = [UserClass getInstance];
+        //if they already are subscribed then don't let them pick until they cancel
+        if (user.subscription_HasActivePaidPlan){
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Please cancel your previous subscription before selecting a new one by going to the App Store." delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+            [alert show];
+           
+        }
+        else{
+        SKProduct* product = [[[EZPurchaseManager sharedInstance] availableProducts] objectAtIndex:indexPath.row];
+        selectedPlanPrice = product.localizedPrice;
+
+        [self doPurchase: product];
+        }
+       
+    }
+}
+
+-(void)purchaseBtnClick:(id)sender{
+//    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"This button was clicked" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+ //   [alert show];
+
+
+//    UserClass *user = [UserClass getInstance];
+ //   NSString * booleanString = (user.subscription_HasActivePaidPlan) ? @"True" : @"False";
+    //if they already are subscribed then don't let them pick until they cancel
+//    alert = [[UIAlertView alloc] initWithTitle:nil message:booleanString delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+ //   [alert show];
+/*    if (user.subscription_HasActivePaidPlan){
+        UIAlertView *alert = [[UIAlertView alloc] initWithTitle:nil message:@"Please cancel your previous subscription before selecting a new one by going to the App Store." delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [alert show];
+        
+    }
+    else{
+ */
+        //the tag tells us which button came from which is which row it belongs to
+        int tagNum = (int)((UIButton*) sender).tag;
+        SKProduct* product = [[[EZPurchaseManager sharedInstance] availableProducts] objectAtIndex:tagNum];
+        ((UIButton*) sender).enabled = NO;
+        selectedPlanPrice = product.localizedPrice;
+        [self doPurchase: product];
+//    }
+}
+
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    
+    return @"";
+}
+
+#pragma mark - KVO
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
+{
+    
+    if ([keyPath isEqualToString:@"receiptDetails"])
+    {
+        [self stopSpinner];
+        [self updateStatus];
+        return;
+    }
+    
+    [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+}
+
+#pragma mark - Private UI
+- (NSDateFormatter*)dateFormatter
+{
+    static NSDateFormatter* dateFormatter;
+    if (dateFormatter == nil)
+    {
+//        dateFormatter = [[NSDateFormatter alloc] init];
+//        [dateFormatter setDateFormat:@"MM/dd/yyyy"];
+
+        dateFormatter = [[NSDateFormatter alloc] init];
+        [dateFormatter setDateStyle:NSDateFormatterMediumStyle];
+      //  [dateFormatter setDateFormat:@"MMM"];
+     //   [dateFormatter setDateStyle:NSDateFormatterMediumStyle];
+     //   [dateFormatter setTimeStyle:NSDateFormatterFullStyle];
+    }
+    return dateFormatter;
+}
+
+
+- (void)updateStatus
+{
+
+    UserClass *user = [UserClass getInstance];
+
+    NSDate* expirationDate = [[EZPurchaseManager sharedInstance] subscriptionExpirationDate];
+    if (expirationDate != nil)
+    {
+        NSDate* expirationDate = [[EZPurchaseManager sharedInstance] subscriptionStartDate];
+        NSString* startDateString = [[self dateFormatter] stringFromDate:expirationDate];
+        
+        user.subscription_planStartDate = startDateString;
+    
+        NSString* expirationDateString = [[self dateFormatter] stringFromDate:expirationDate];
+        
+        user.subscription_PlanExpireDate = expirationDateString;
+        
+        user.subscription_PlanPrice = selectedPlanPrice;
+        
+        [[NSUserDefaults standardUserDefaults] setObject: user.subscription_PlanPrice forKey:@"user.subscription_PlanPrice"];
+        [[NSUserDefaults standardUserDefaults] setObject: user.subscription_planStartDate forKey:@"subscription_planStartDate"];
+        [[NSUserDefaults standardUserDefaults] setObject: user.subscription_PlanExpireDate forKey:@"subscription_PlanExpireDate"];
+        [[NSUserDefaults standardUserDefaults] synchronize]; //write out the data
+
+    }
+    
+    [_currentSubscriptionTable reloadData];
+
+}
+
+//this is a delegate call from ezPurchaseManager to let us know that the purchase failed so turn off the spinner, let the serve know
+-(void)purchaseFailed{
+
+    [self stopSpinner];
+    
+    UserClass *user = [UserClass getInstance];
+    [MetricsLogWebService LogException: [NSString stringWithFormat:@"Purchase Failed! for employerId= %@" , user.employerID]];
+
+//    user.subscription_PlanPrice = selectedPlanPrice;
+//    user.subscription_freePlanActive = NO;
+//    user.subscription_HasActivePaidPlan = YES;
+//    user.subscription_PlanExpireDate = @"";;
+//    user.subscription_planStartDate = @"";;
+//    [self updateStatus];
+    
+}
+-(void) startSpinner{
+    if (!self.spinner)
+    {
+        self.spinner = [[MBProgressHUD alloc] initWithView:self.view];
+    }
+    self.spinner.labelText = @"Connecting to the server";
+    [self.view addSubview:self.spinner];
+    [self.spinner show:YES];
+}
+
+-(void) stopSpinner{
+    [self.spinner hide:YES];
+}
+
+- (void)subscriptionError{
+    [self stopSpinner];
+    
+}
+- (void)subscriptionExpired{
+    [self stopSpinner];
+    [self updateStatus];
+    
+}
+//this is a call back from the subscription webservice
+- (void)subscriptionValid{
+    [self stopSpinner];
+    [self updateStatus];
+}
+
+
+@end

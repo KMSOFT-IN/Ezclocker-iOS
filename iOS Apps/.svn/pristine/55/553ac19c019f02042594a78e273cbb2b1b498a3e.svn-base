@@ -1,0 +1,88 @@
+//
+//  ViewAccountViewController.m
+//  ezClocker
+//
+//  Created by Raya Khashab on 2/20/14.
+//  Copyright (c) 2014 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "ViewAccountViewController.h"
+#import "ECSlidingViewController.h"
+#import "user.h"
+#import "CommonLib.h"
+#import "UpdateAccountViewController.h"
+
+@interface ViewAccountViewController ()
+
+@end
+
+@implementation ViewAccountViewController
+@synthesize emailLabel = _emailLabel;
+@synthesize nameLabel = _nameLabel;
+@synthesize mainView = _mainView;
+
+- (id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
+{
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    if (self) {
+        // Custom initialization
+    }
+    return self;
+}
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+	// Do any additional setup after loading the view.
+    UserClass *user = [UserClass getInstance];
+    _emailLabel.text = user.userEmail;
+    
+    _editBarBtn.style = UIBarButtonItemStylePlain;
+    _editBarBtn.enabled = false;
+    _editBarBtn.title = nil;
+    self.navigationItem.rightBarButtonItem = nil;
+
+#ifdef PERSONAL_VERSION
+    _nameLabel.text = user.indivdualName;
+#endif
+    _mainView.backgroundColor = UIColorFromRGB(GRAY_BACKGROUND_COLOR);
+
+    
+}
+
+- (void)viewWillAppear:(BOOL)animated
+{
+    
+    [super viewWillAppear:animated];
+    [_signInButton setTitleColor:UIColorFromRGB(EZCLOCKER_BLUE_COLOR) forState:UIControlStateNormal];
+    
+}
+
+
+- (void)didReceiveMemoryWarning
+{
+    [super didReceiveMemoryWarning];
+    // Dispose of any resources that can be recreated.
+}
+
+- (IBAction)revealMenu:(id)sender {
+    [self.slidingViewController anchorTopViewTo:ECRight];
+
+}
+- (IBAction)updateAccount:(id)sender {
+    UpdateAccountViewController *controller = [self.storyboard instantiateViewControllerWithIdentifier:@"UpdatePersonalAccount"];
+    
+    UINavigationController *addEmployeeNavigationController = [[UINavigationController alloc] initWithRootViewController:controller];
+    
+    
+    controller.delegate = (id) self;
+    controller.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+    
+    [self presentViewController:addEmployeeNavigationController animated:YES completion:nil];
+
+}
+- (IBAction)doSignOut:(id)sender {
+    [self.delegate loginPersonalWasSelectedFromViewAccount:self];
+
+}
+@end

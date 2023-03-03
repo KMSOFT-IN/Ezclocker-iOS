@@ -1,0 +1,104 @@
+//
+//  user.m
+//  TCS Mobile
+//
+//  Created by Raya Khashab on 9/2/12.
+//  Copyright (c) 2013 ezNova Technologies LLC. All rights reserved.
+//
+
+#import "user.h"
+#import "NSString+Extensions.h"
+#import "NSDate+Extensions.h"
+
+@implementation UserClass
+
+@synthesize employerID, userID, userType, authToken, currentClockMode, lastClockIn, lastClockOut, userPin, employerName,
+            remindersSet, userEmail, availableEmployeeSlots,
+subscription_PlanPrice, subscription_PlanExpireDate, subscription_planStartDate, userGaveUsRatingFeedback, appLaunchCounter, subscription_freePlanActive, subscription_HasActivePaidPlan, clockInReminders, clockOutReminders, employeeCount, payrollStartDate, payrollEndDate, lastEmailToSent, disableTimeEntryEditing;
+
+static UserClass *instance = nil;
+
++(UserClass*)getInstance{
+    if (instance == nil)
+    {
+        instance = [UserClass new];
+        instance.employerLocation = [[EmployerLocation alloc] init];
+        instance.subscription_planStartDate = @"";
+        instance.subscription_PlanExpireDate = @"";
+        instance.clockInReminders = [[NSMutableArray alloc] init];
+        instance.clockOutReminders = [[NSMutableArray alloc] init];
+        instance.employeeNameIDList = [[NSMutableDictionary alloc] init];
+    }
+    return instance;
+}
+
+
+- (void)checkPayrollStartDate {
+    NSString* testPayrollStartDate = [NSString trim:self.payrollStartDate];
+    if ([NSString isNilOrEmpty:testPayrollStartDate])
+    {
+        NSTimeInterval secondsPerDay = 24 * 60 * 60;
+        NSDate *today = [[NSDate alloc] init];
+        NSDate *oneWeek;
+        
+        oneWeek = [today dateByAddingTimeInterval: -secondsPerDay * 7];
+        self.payrollStartDate =[oneWeek toDefaultDateString];
+        
+        self.payrollEndDate = [today toDefaultDateString];
+        
+        //save dates
+        [[NSUserDefaults standardUserDefaults] setObject:self.payrollStartDate forKey:@"payrollStartDate"];
+        [[NSUserDefaults standardUserDefaults] setObject:self.payrollEndDate forKey:@"payrollEndDate"];
+        [[NSUserDefaults standardUserDefaults] synchronize]; //write out the data
+    }
+}
+
++(void)releaseInstance{
+    instance = nil;
+}
+
+- (NSString*)getModifiedBy {
+    NSString *modifiedBy = [NSString trim:self.employerName];
+    if ([NSString isNilOrEmpty:modifiedBy]) {
+        modifiedBy = [NSString trim:self.userEmail];
+    }
+    return modifiedBy;
+}
+
+- (void) scheduleNotificationOn:(NSDate*) fireDate
+                           text:(NSString*) alertText
+                         action:(NSString*) alertAction
+                          sound:(NSString*) soundfileName
+                    launchImage:(NSString*) launchImage
+                        andInfo:(NSDictionary*) userInfo
+
+{
+	UILocalNotification *localNotification = [[UILocalNotification alloc] init];
+    localNotification.fireDate = fireDate;
+    localNotification.timeZone = [NSTimeZone defaultTimeZone];	
+    
+    localNotification.alertBody = alertText;
+    localNotification.alertAction = alertAction;
+	localNotification.repeatInterval = NSCalendarUnitDay;
+    
+	if(soundfileName == nil)
+	{
+		localNotification.soundName = UILocalNotificationDefaultSoundName;
+	}
+	else
+	{
+		localNotification.soundName = soundfileName;
+	}
+    
+	localNotification.alertLaunchImage = launchImage;
+    
+	//self.badgeCount ++;
+    localNotification.applicationIconBadgeNumber = -1;//self.badgeCount;
+    localNotification.userInfo = userInfo;
+    
+	// Schedule it with the app
+    [[UIApplication sharedApplication] scheduleLocalNotification:localNotification];
+
+}
+
+@end

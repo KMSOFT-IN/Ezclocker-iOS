@@ -766,6 +766,8 @@
 		79FDE1011BF1658C00586EED /* person_Large.png in Resources */ = {isa = PBXBuildFile; fileRef = 79FDE1001BF1658C00586EED /* person_Large.png */; };
 		79FDE1031BF2AB2E00586EED /* addPerson.png in Resources */ = {isa = PBXBuildFile; fileRef = 79FDE1021BF2AB2E00586EED /* addPerson.png */; };
 		79FE6F921D77ABB700560911 /* EmployerSettingsViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 79FE6F911D77ABB700560911 /* EmployerSettingsViewController.m */; };
+		88AF661829B2F0AD005E04C8 /* customCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 88AF661729B2F0AD005E04C8 /* customCell.m */; };
+		88AF661929B2F0E5005E04C8 /* customCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 88AF661729B2F0AD005E04C8 /* customCell.m */; };
 		9236D740188DD51A0033F6F0 /* CoreLocation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9236D73F188DD51A0033F6F0 /* CoreLocation.framework */; };
 		9236D742188DD5210033F6F0 /* MapKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9236D741188DD5210033F6F0 /* MapKit.framework */; };
 		929A029F1891C1B00023F934 /* EmployerLocation.m in Sources */ = {isa = PBXBuildFile; fileRef = 929A029E1891C1B00023F934 /* EmployerLocation.m */; };
@@ -1254,6 +1256,8 @@
 		79FDE1021BF2AB2E00586EED /* addPerson.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = addPerson.png; sourceTree = "<group>"; };
 		79FE6F901D77ABB700560911 /* EmployerSettingsViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = EmployerSettingsViewController.h; path = ../EmployerSettingsViewController.h; sourceTree = "<group>"; };
 		79FE6F911D77ABB700560911 /* EmployerSettingsViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = EmployerSettingsViewController.m; path = ../EmployerSettingsViewController.m; sourceTree = "<group>"; };
+		88AF661629B2F0AD005E04C8 /* customCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = customCell.h; sourceTree = "<group>"; };
+		88AF661729B2F0AD005E04C8 /* customCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = customCell.m; sourceTree = "<group>"; };
 		9236D73F188DD51A0033F6F0 /* CoreLocation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreLocation.framework; path = System/Library/Frameworks/CoreLocation.framework; sourceTree = SDKROOT; };
 		9236D741188DD5210033F6F0 /* MapKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MapKit.framework; path = System/Library/Frameworks/MapKit.framework; sourceTree = SDKROOT; };
 		929A029C1891BE5D0023F934 /* LocationEntityFields.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = LocationEntityFields.h; sourceTree = "<group>"; };
@@ -1451,6 +1455,8 @@
 				4C7F5BE6298786F300AA5F2D /* TimeOffDetailViewController.h */,
 				4C7F5BE7298786F400AA5F2D /* TimeOffDetailViewController.m */,
 				4C8C6C97297CB9DA0027DAC8 /* TimeOffListViewController.h */,
+				88AF661629B2F0AD005E04C8 /* customCell.h */,
+				88AF661729B2F0AD005E04C8 /* customCell.m */,
 				4C8C6C96297CB9D90027DAC8 /* TimeOffListViewController.m */,
 			);
 			path = TimeOff;
@@ -3117,6 +3123,7 @@
 				79762A471C5B1863006788FC /* DeletedTimeEntry+CoreDataProperties.m in Sources */,
 				798050F01E4AA0BF00852BF5 /* LocationsWebService.m in Sources */,
 				79F50679205B57AC00706B63 /* EmployeeInfoViewController.m in Sources */,
+				88AF661829B2F0AD005E04C8 /* customCell.m in Sources */,
 				79FDE0F01BEBF4BB00586EED /* ClockWebServices.m in Sources */,
 				71F833D5181783C0005BC19E /* EmployeeProfileViewController.m in Sources */,
 				79C30EB11C38A45600632D76 /* DayHistoryItem.m in Sources */,
@@ -3214,6 +3221,7 @@
 				79E59376207983E5003E95B6 /* JobCodeDetailsViewController.m in Sources */,
 				792C0AC1200164EA00CCD94D /* AddTimeEntryViewController.m in Sources */,
 				792C0AC2200164EA00CCD94D /* CommonLib.m in Sources */,
+				88AF661929B2F0E5005E04C8 /* customCell.m in Sources */,
 				792C0AC3200164EA00CCD94D /* EmployerSettingsViewController.m in Sources */,
 				792C0AC4200164EA00CCD94D /* DeletedTimeEntry.m in Sources */,
 				79F5067A205B57AC00706B63 /* EmployeeInfoViewController.m in Sources */,

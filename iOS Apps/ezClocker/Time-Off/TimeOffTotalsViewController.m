@@ -20,13 +20,13 @@
 #import "NSDictionary+Extensions.h"
 #import "WebViewController.h"
 #import "NSDate+Extensions.h"
+#import "customCell.h"
 
 @interface TimeOffTotalsViewController ()
 
 @end
 
 @implementation TimeOffTotalsViewController
-
 
 
 - (id)initWithCoder:(NSCoder *)aDecoder
@@ -85,50 +85,102 @@
     
 }
 
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    UserClass *user = [UserClass getInstance];
+    if ([user.userType isEqualToString:@"employer"] || (CommonLib.userIsManager)) {
+        return 80;
+    }
+    else {
+        return 50;
+    }
+   
+}
+
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    static NSString *CellIdentifier = @"Cell2";
+    static NSString *CellIdentifier = @"customCell";
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:CellIdentifier];
+    
     if (cell == nil) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:CellIdentifier];
         cell.detailTextLabel.textColor = UIColorFromRGB(GRAY_TEXT_COLOR);
     }
+    
+   
 
     if ((timeOffTotalsList != nil) && ([timeOffTotalsList count] > 0))
     {
+        
+        
         UserClass *user = [UserClass getInstance];
+        UILabel *lbl1 = (UILabel *)[cell viewWithTag: 5];
         if ([user.userType isEqualToString:@"employer"] || (CommonLib.userIsManager))
         {
+            customCell *mainCell = [timeOffTotalsList objectAtIndex:indexPath.row];
             NSDictionary *timeOffObj = [timeOffTotalsList objectAtIndex:indexPath.row];
-            NSString *detailText = [NSString stringWithFormat:@"PTO: %@ SICK: %@ HOLIDAY: %@ UNPAID: %@", [timeOffObj valueForKey:@"PTOTotals"], [timeOffObj valueForKey:@"sickTotals"], [timeOffObj valueForKey:@"HolidayTotals"], [timeOffObj valueForKey:@"unpaidTotals"]];
-        
+            NSString *detailText = [NSString stringWithFormat:@"PTO: %@ SICK: %@ HOLIDAY: %@ UNPAID: %@",
+                                    [timeOffObj valueForKey:@"PTOTotals"],
+                                    [timeOffObj valueForKey:@"sickTotals"],
+                                    [timeOffObj valueForKey:@"HolidayTotals"],
+                                    [timeOffObj valueForKey:@"unpaidTotals"]];
+            
+            
+            
+            UILabel *lbl2 = (UILabel *)[cell viewWithTag: 1];
+            lbl2.text = [NSString stringWithFormat: @"PTO : %@", [mainCell valueForKey:@"PTOTotals"]];
+            
+            UILabel *lbl3 = (UILabel *)[cell viewWithTag: 2];
+            lbl3.text = [NSString stringWithFormat: @"SICK : %@", [mainCell valueForKey:@"sickTotals"]];
+            
+            UILabel *lbl4 = (UILabel *)[cell viewWithTag: 3];
+            lbl4.text = [NSString stringWithFormat: @"HOLIDAY : %@", [mainCell valueForKey:@"HolidayTotals"]];
+            
+            UILabel *lbl5 = (UILabel *)[cell viewWithTag: 4];
+            lbl5.text = [NSString stringWithFormat: @"UNPAID : %@", [mainCell valueForKey:@"unpaidTotals"]];
+            
+
             if ([user.userType isEqualToString:@"employer"] || (CommonLib.userIsManager))
             {
-                cell.textLabel.text = [timeOffObj valueForKey:@"employeeName"];
+                //cell.textLabel.text = [timeOffObj valueForKey:@"employeeName"];
+               // UILabel *lbl1 = (UILabel *)[cell viewWithTag: 5];
+                lbl1.text = [mainCell valueForKey:@"employeeName"];
                 detailText = detailText;
             }
             else
             {
-                cell.textLabel.text = detailText;
+             //   UILabel *lbl1 = (UILabel *)[cell viewWithTag: 5];
+                lbl1.text = detailText;
+                //cell.textLabel.text = detailText;
             }
-
             cell.detailTextLabel.text = detailText;
+            
+              
         }
         else
         {
-            NSDictionary *timeOffObj = [timeOffTotalsList objectAtIndex:0];
+            customCell *mainCell = [timeOffTotalsList objectAtIndex : 0];
+           // NSDictionary *timeOffObj = [timeOffTotalsList objectAtIndex:0];
             switch (indexPath.row) {
                 case 0:
-                    cell.textLabel.text = [NSString stringWithFormat: @"Total PTO Taken: %@ hrs", [timeOffObj valueForKey:@"PTOTotals"]];
+                //    cell.textLabel.text = [NSString stringWithFormat: @"Total PTO Taken: %@ hrs", [timeOffObj valueForKey:@"PTOTotals"]];
+                   // UILabel *lbl1 = (UILabel *)[cell viewWithTag: 1];
+                    lbl1.text = [NSString stringWithFormat: @"Total PTO Taken: %@ hrs", [mainCell valueForKey:@"PTOTotals"]];
                     break;
                 case 1:
-                    cell.textLabel.text = [NSString stringWithFormat: @"Total Sick Taken: %@ hrs", [timeOffObj valueForKey:@"sickTotals"]];
+                //cell.textLabel.text = [NSString stringWithFormat: @"Total Sick Taken: %@ hrs", [timeOffObj valueForKey:@"sickTotals"]];
+                    //UILabel *lbl1 = (UILabel *)[cell viewWithTag: 5];
+                    lbl1.text = [NSString stringWithFormat: @"Total Sick Taken: %@ hrs", [mainCell valueForKey:@"sickTotals"]];
                     break;
                 case 2:
-                    cell.textLabel.text = [NSString stringWithFormat: @"Total Holiday Taken: %@ hrs", [timeOffObj valueForKey:@"HolidayTotals"]];
+                   // cell.textLabel.text = [NSString stringWithFormat: @"Total Holiday Taken: %@ hrs", [timeOffObj valueForKey:@"HolidayTotals"]];
+                  //  UILabel *lbl1 = (UILabel *)[cell viewWithTag: 5];
+                    lbl1.text = [NSString stringWithFormat: @"Total Holiday Taken: %@ hrs", [mainCell valueForKey:@"HolidayTotals"]];
                     break;
                 case 3:
-                    cell.textLabel.text = [NSString stringWithFormat: @"Total Unpaid Taken: %@ hrs", [timeOffObj valueForKey:@"unpaidTotals"]];
+                   // cell.textLabel.text = [NSString stringWithFormat: @"Total Unpaid Taken: %@ hrs", [timeOffObj valueForKey:@"unpaidTotals"]];
+                  //  UILabel *lbl1 = (UILabel *)[cell viewWithTag: 5];
+                    lbl1.text = [NSString stringWithFormat: @"Total Unpaid Taken: %@ hrs", [mainCell valueForKey:@"unpaidTotals"]];
                     break;
 
                 default:

@@ -47,7 +47,13 @@ int DENIED_SECTION = 3;
     [formatter setDateFormat:@"yyyy"];
     NSString *currentYearString = [formatter stringFromDate:[NSDate date]];
     filterByDate = currentYearString;
-    
+   // [self.tableView setSeparatorStyle:UITableViewCellSeparatorStyleNone];
+    if (@available(iOS 15.0, *)) {
+        self.tableView.sectionHeaderTopPadding = 0;
+    } else {
+        // Fallback on earlier versions
+    }
+
     UserClass *user = [UserClass getInstance];
     if ([user.userType isEqualToString:@"employer"] || (CommonLib.userIsManager))
     {
@@ -67,6 +73,7 @@ int DENIED_SECTION = 3;
     
     self.tableView.allowsSelectionDuringEditing = YES;
     self.tableView.allowsMultipleSelectionDuringEditing = NO;
+    //self.tableView.contentInset = UIEdgeInsetsMake(0, -20, 0, -20);
     
     UIView *customView  = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 200, 44)];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, customView.frame.size.width, 44)];
@@ -110,6 +117,7 @@ int DENIED_SECTION = 3;
     return 4;
 }
 
+
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == FILTER_SECTION)
         return 1;
@@ -145,7 +153,6 @@ int DENIED_SECTION = 3;
         tempLabel.text = @"Denied";
     
     [tempView addSubview:tempLabel];
-    
     return tempView;
 }
 
